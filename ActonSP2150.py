@@ -63,3 +63,18 @@ class ActonSP2150():
     def get_turret_info(self):
         """Get groove spacing of each grating on each turret"""
         return self.instr.query('?TURRETS')
+    
+
+    def set_filter(self, filter_pos):
+        """Set filter wheel position number"""
+        return self.instr.query(f'{int(filter_pos)} FILTER')
+
+    
+    def get_filter(self):
+        """Get filter wheel position number"""
+        return self.instr.query(f'?FILTER')
+
+
+    def home_filter(self):
+            """Set filter wheel to home position"""
+            return self.instr.query(f'FHOME')
