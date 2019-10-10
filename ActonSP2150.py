@@ -13,7 +13,7 @@ class ActonSP2150():
     
     def set_scan_speed(self, speed):
         """Set grating scan speed in nm/min"""
-        return self.instr.query(f'{speed} NM/MIN')
+        return self.instr.query(f'{float(speed):.1f} NM/MIN')
     
 
     def get_scan_speed(self):
@@ -23,12 +23,12 @@ class ActonSP2150():
 
     def scan_to_wavelength(self, wavelength):
         """Scan grating to wavelength in nm"""
-        return self.instr.query(f'{wavelength:.1f} NM')
+        return self.instr.query(f'{float(wavelength):.1f} NM')
 
 
     def goto_wavelength(self, wavelength):
         """Go to grating position for wavelength in nm"""
-        return self.instr.query(f'{wavelength:.1f} GOTO')
+        return self.instr.query(f'{float(wavelength):.1f} GOTO')
     
     def get_wavelength(self):
         """Get current grating wavelength position in nm"""
@@ -72,9 +72,9 @@ class ActonSP2150():
     
     def get_filter(self):
         """Get filter wheel position number"""
-        return self.instr.query(f'?FILTER')
+        return self.instr.query('?FILTER')
 
 
     def home_filter(self):
             """Set filter wheel to home position"""
-            return self.instr.query(f'FHOME')
+            return self.instr.query('FHOME')
