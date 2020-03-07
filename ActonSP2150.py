@@ -2,18 +2,31 @@
 
 import visa
 
+rm = visa.ResourceManager()
+
 
 class sp2150:
     """Monochromator instrument object."""
 
-    def __init__(self, addr, timeout=10000):
+    def __init__(self, address, timeout=10000):
         """Instantiate PyVISA instrument object.
 
         Default termination char settings for PyVISA are compatible with RS232.
+
+        Parameters
+        ----------
+        address : str
+            Full VISA resource address, e.g. "ASRL2::INSTR", "GPIB0::14::INSTR" etc.
+        timeout: int or float, optional
+            Communication timeout in ms.
         """
-        rm = visa.ResourceManager()
-        self.instr = rm.open_resource(addr)
-        self.instr.timeout = timeout
+        self.address = address
+        self.timeout = timeout
+
+    def connect(self):
+        """Connect to instrument."""
+        self.instr = rm.open_resource(self.address)
+        self.instr.timeout = self.timeout
 
     def set_scan_speed(self, speed):
         """Set grating scan speed in nm/min."""
