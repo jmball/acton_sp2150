@@ -28,6 +28,10 @@ class sp2150:
         self.instr = rm.open_resource(self.address)
         self.instr.timeout = self.timeout
 
+    def disconnect(self):
+        """Disconnect instrument."""
+        self.instr.close()
+
     def set_scan_speed(self, speed):
         """Set grating scan speed in nm/min."""
         return self.instr.query(f"{float(speed):.1f} NM/MIN")
