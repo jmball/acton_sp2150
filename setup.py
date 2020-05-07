@@ -16,7 +16,7 @@ setuptools.setup(
     py_modules=["sp2150"],
     classifiers=[
         "Programming Language :: Python :: 3",
-        "License :: OSI Approved :: GPL-3.0",
+        "License :: OSI Approved :: MIT",
         "Operating System :: OS Independent",
     ],
 )
