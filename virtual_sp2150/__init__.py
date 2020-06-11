@@ -15,4 +15,4 @@ if __version__ is None:
         __version__ = "0.0.0"
         pass
 
-from .sp2150 import *
+from .virtual_sp2150 import *

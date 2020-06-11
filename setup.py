@@ -13,7 +13,7 @@ setuptools.setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/jmball/acton_sp2150",
-    py_modules=["sp2150"],
+    py_modules=["sp2150", "virtual_sp2150"],
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT",
