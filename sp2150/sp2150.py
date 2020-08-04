@@ -25,7 +25,7 @@ class sp2150:
             Communication timeout in ms.
         """
         self.instr = rm.open_resource(resource_name)
-        self.instr.timeout = self.timeout
+        self.instr.timeout = timeout
 
     def disconnect(self):
         """Disconnect instrument."""
