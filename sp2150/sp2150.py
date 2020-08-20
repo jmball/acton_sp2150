@@ -2,99 +2,141 @@
 
 import visa
 
-rm = visa.ResourceManager()
-
 
 class sp2150:
     """Monochromator instrument object."""
 
-    def __init__(self):
-        """Instantiate PyVISA instrument object.
+    def __enter__(self):
+        """Enter the runtime context related to this object."""
+        return self
 
-        Default termination char settings for PyVISA are compatible with RS232.
-        """
+    def __exit__(self, exc_type, exc_value, traceback):
+        """Exit the runtime context related to this object."""
+        self.disconnect()
 
-    def connect(self, resource_name, timeout=10000):
-        """Connect to instrument.
-        
+    def connect(self, resource_name, resource_manager=None, resource_kwargs={}):
+        """Connect to the instrument.
+
         Parameters
         ----------
-        address : str
-            Full VISA resource address, e.g. "ASRL2::INSTR", "GPIB0::14::INSTR" etc.
-        timeout: int or float, optional
-            Communication timeout in ms.
+        resource_name : str
+            Full VISA resource name, e.g. "ASRL2::INSTR", "GPIB0::14::INSTR" etc. See
+            https://pyvisa.readthedocs.io/en/latest/introduction/names.html for more
+            info on correct formatting for resource names.
+        resource_manager : visa.ResourceManager, optional
+            Resource manager used to create new connection. If `None`, create a new
+            resource manager using system set VISA backend.
+        resource_kwargs : dict
+            Keyword arguments passed to PyVISA resource to be used to change
+            instrument attributes after construction.
         """
-        self.instr = rm.open_resource(resource_name)
-        self.instr.timeout = timeout
+        if resource_manager is None:
+            resource_manager = visa.ResourceManager()
+        self.instr = resource_manager.open_resource(resource_name, **resource_kwargs)
 
     def disconnect(self):
         """Disconnect instrument."""
         self.instr.close()
 
-    def set_scan_speed(self, speed):
-        """Set grating scan speed in nm/min."""
-        return self.instr.query(f"{float(speed):.1f} NM/MIN")
+    def _setter_query(self, cmd):
+        """Send a command to set a value and validate output.
 
-    def get_scan_speed(self):
+        Paramters
+        ---------
+        cmd : str
+            Command to issue.
+        """
+        resp = self.instr.query(cmd)
+
+        # check cmd was successful
+        if not resp.endswith("ok\r\n"):
+            raise ValueError(
+                f"Command failed. Check parameter and try again. Instrument response "
+                + f"message: {resp}"
+            )
+
+    @property
+    def scan_speed(self):
         """Get grating scan speed in nm/min."""
-        return self.instr.query("?NM/MIN")
+        return self.instr.query("?NM/MIN").strip(" ok\r\n")
+
+    @scan_speed.setter
+    def scan_speed(self, speed):
+        """Set grating scan speed in nm/min."""
+        self._setter_query(f"{float(speed):.1f} NM/MIN")
 
     def scan_to_wavelength(self, wavelength):
         """Scan grating to wavelength in nm."""
-        return self.instr.query(f"{float(wavelength):.1f} NM")
+        resp = self.instr.query(f"{float(wavelength):.1f} NM")
 
-    def goto_wavelength(self, wavelength):
-        """Go to grating position for wavelength in nm."""
-        return self.instr.query(f"{float(wavelength):.1f} GOTO")
+        # check cmd was successful
+        if not resp.endswith("ok\r\n"):
+            raise ValueError(
+                f"Command failed. Check parameter and try again. Instrument response "
+                + f"message: {resp}"
+            )
 
-    def get_wavelength(self):
+    @property
+    def wavelength(self):
         """Get current grating wavelength position in nm."""
-        return self.instr.query("?NM")
+        return self.instr.query("?NM").strip(" ok\r\n")
 
-    def set_grating(self, grating):
-        """Set grating number."""
-        return self.instr.query(f"{int(grating)} GRATING")
+    @wavelength.setter
+    def wavelength(self, wavelength):
+        """Set grating position for wavelength in nm."""
+        self._setter_query(f"{float(wavelength):.1f} GOTO")
 
-    def get_grating(self):
+    @property
+    def grating(self):
         """Get grating number."""
-        return self.instr.query("?GRATING")
+        return self.instr.query("?GRATING").strip(" ok\r\n")
 
-    def set_turret(self, turret):
-        """Set turrent number."""
-        return self.instr.query(f"{int(turret)} TURRET")
+    @grating.setter
+    def grating(self, grating):
+        """Set grating number."""
+        self._setter_query(f"{int(grating)} GRATING")
 
-    def get_turret(self):
+    @property
+    def turret(self):
         """Get turret number."""
-        return self.instr.query("?TURRET")
+        return self.instr.query("?TURRET").strip(" ok\r\n")
 
-    def get_grating_info(self):
+    @turret.setter
+    def turret(self, turret):
+        """Set turrent number."""
+        self._setter_query(f"{int(turret)} TURRET")
+
+    @property
+    def grating_info(self):
         """Get groove spacing and blaze wavelength of each grating."""
-        return self.instr.query("?GRATINGS")
+        return self.instr.query("?GRATINGS").strip(" ok\r\n")
 
-    def get_turret_info(self):
+    @property
+    def turret_info(self):
         """Get groove spacing of each grating on each turret."""
-        return self.instr.query("?TURRETS")
+        return self.instr.query("?TURRETS").strip(" ok\r\n")
 
-    def set_filter(self, filter_pos):
-        """Set filter wheel position number."""
-        return self.instr.query(f"{int(filter_pos)} FILTER")
-
-    def get_filter(self):
+    @property
+    def filter(self):
         """Get filter wheel position number."""
-        return self.instr.query("?FILTER")
+        return self.instr.query("?FILTER").strip(" ok\r\n")
+
+    @filter.setter
+    def filter(self, filter_pos):
+        """Set filter wheel position number."""
+        self.instr.query(f"{int(filter_pos)} FILTER")
 
     def home_filter(self):
         """Set filter wheel to home position."""
-        return self.instr.query("FHOME")
+        self.instr.query("FHOME").strip(" ok\r\n")
 
 
 if __name__ == "__main__":
-
     import argparse
 
     # set up cli
     parser = argparse.ArgumentParser()
-    parser.add_argument("address", help="instrument address")
+    parser.add_argument("-n", "--resource-name", help="Instrument resource name")
     parser.add_argument(
         "function",
         help="function to call",
@@ -118,47 +160,43 @@ if __name__ == "__main__":
     parser.add_argument(
         "-p",
         "--parameter",
-        help="parameter for function, i.e. wavelength in nm, grating number, turret number, filter number",
+        help=(
+            "parameter for function, i.e. wavelength in nm, grating number, turret "
+            + "number, filter number"
+        ),
     )
     args = parser.parse_args()
 
-    # create instrument instance
-    mono = sp2150(args.address)
+    # run command in context manager to ensure proper cleanup
+    with sp2150() as mono:
+        mono.connect(args.resource_name)
 
-    # call function
-    if args.function == "set_scan_speed":
-        resp = mono.set_scan_speed(args.parameter)
-    elif args.function == "get_scan_speed":
-        resp = mono.get_scan_speed()
-    elif args.function == "scan_to_wavelength":
-        resp = mono.scan_to_wavelength(args.parameter)
-    elif args.function == "goto_wavelength":
-        resp = mono.goto_wavelength(args.parameter)
-    elif args.function == "get_wavelength":
-        resp = mono.get_wavelength()
-    elif args.function == "set_grating":
-        resp = mono.set_grating(args.parameter)
-    elif args.function == "get_grating":
-        resp = mono.get_grating()
-    elif args.function == "set_turret":
-        resp = mono.set_turret(args.parameter)
-    elif args.function == "get_turret":
-        resp = mono.get_turret()
-    elif args.function == "get_grating_info":
-        resp = mono.get_grating_info()
-    elif args.function == "get_turret_info":
-        resp = mono.get_turret_info()
-    elif args.function == "set_filter":
-        resp = mono.set_filter(args.parameter)
-    elif args.function == "get_filter":
-        resp = mono.get_filter()
-    elif args.function == "home_filter":
-        resp = mono.home_filter()
-
-    # check cmd was successful
-    if not resp.endswith("ok\r\n"):
-        raise ValueError(
-            f"Command failed. Check parameter and try again. Instrument response msg: {resp}"
-        )
-
-    print(resp.strip(" ok\r\n"))
+        # call function
+        if args.function == "set_scan_speed":
+            mono.scan_speed = args.parameter
+        elif args.function == "get_scan_speed":
+            print(mono.scan_speed)
+        elif args.function == "scan_to_wavelength":
+            mono.scan_to_wavelength(args.parameter)
+        elif args.function == "goto_wavelength":
+            mono.wavelength = args.parameter
+        elif args.function == "get_wavelength":
+            print(mono.wavelength)
+        elif args.function == "set_grating":
+            mono.grating = args.parameter
+        elif args.function == "get_grating":
+            print(mono.grating)
+        elif args.function == "set_turret":
+            mono.turret = args.parameter
+        elif args.function == "get_turret":
+            print(mono.turret)
+        elif args.function == "get_grating_info":
+            print(mono.grating_info)
+        elif args.function == "get_turret_info":
+            print(mono.turret_info)
+        elif args.function == "set_filter":
+            mono.filter = args.parameter
+        elif args.function == "get_filter":
+            print(mono.filter)
+        elif args.function == "home_filter":
+            mono.home_filter()
