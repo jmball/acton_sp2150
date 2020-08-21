@@ -14,7 +14,7 @@ class sp2150:
         """Exit the runtime context related to this object."""
         self.disconnect()
 
-    def connect(self, resource_name, resource_manager=None, resource_kwargs={}):
+    def connect(self, resource_name, resource_manager=None, **resource_kwargs):
         """Connect to the instrument.
 
         Parameters
