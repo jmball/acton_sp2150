@@ -124,7 +124,7 @@ class sp2150:
     @filter.setter
     def filter(self, filter_pos):
         """Set filter wheel position number."""
-        self.instr.query(f"{int(filter_pos)} FILTER")
+        self._setter_query(f"{int(filter_pos)} FILTER")
 
     def home_filter(self):
         """Set filter wheel to home position."""
