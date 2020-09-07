@@ -58,7 +58,7 @@ class sp2150:
     @property
     def scan_speed(self):
         """Get grating scan speed in nm/min."""
-        return self.instr.query("?NM/MIN").strip(" ok\r\n")
+        return float(self.instr.query("?NM/MIN").strip(" ok\r\n"))
 
     @scan_speed.setter
     def scan_speed(self, speed):
@@ -79,7 +79,7 @@ class sp2150:
     @property
     def wavelength(self):
         """Get current grating wavelength position in nm."""
-        return self.instr.query("?NM").strip(" ok\r\n")
+        return float(self.instr.query("?NM").strip(" ok\r\n"))
 
     @wavelength.setter
     def wavelength(self, wavelength):
@@ -89,7 +89,7 @@ class sp2150:
     @property
     def grating(self):
         """Get grating number."""
-        return self.instr.query("?GRATING").strip(" ok\r\n")
+        return int(self.instr.query("?GRATING").strip(" ok\r\n"))
 
     @grating.setter
     def grating(self, grating):
@@ -99,7 +99,7 @@ class sp2150:
     @property
     def turret(self):
         """Get turret number."""
-        return self.instr.query("?TURRET").strip(" ok\r\n")
+        return int(self.instr.query("?TURRET").strip(" ok\r\n"))
 
     @turret.setter
     def turret(self, turret):
@@ -119,7 +119,7 @@ class sp2150:
     @property
     def filter(self):
         """Get filter wheel position number."""
-        return self.instr.query("?FILTER").strip(" ok\r\n")
+        return int(self.instr.query("?FILTER").strip(" ok\r\n"))
 
     @filter.setter
     def filter(self, filter_pos):
