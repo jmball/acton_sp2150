@@ -1,6 +1,6 @@
 """Acton SP2150 monochromator control library."""
 
-import visa
+import pyvisa
 
 
 class sp2150:
@@ -23,7 +23,7 @@ class sp2150:
             Full VISA resource name, e.g. "ASRL2::INSTR", "GPIB0::14::INSTR" etc. See
             https://pyvisa.readthedocs.io/en/latest/introduction/names.html for more
             info on correct formatting for resource names.
-        resource_manager : visa.ResourceManager, optional
+        resource_manager : pyvisa.ResourceManager, optional
             Resource manager used to create new connection. If `None`, create a new
             resource manager using system set VISA backend.
         resource_kwargs : dict
@@ -31,7 +31,7 @@ class sp2150:
             instrument attributes after construction.
         """
         if resource_manager is None:
-            resource_manager = visa.ResourceManager()
+            resource_manager = pyvisa.ResourceManager()
         self.instr = resource_manager.open_resource(resource_name, **resource_kwargs)
 
     def disconnect(self):
