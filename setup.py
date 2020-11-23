@@ -1,22 +1,4 @@
-import setuptools
+from setuptools import setup
 
-with open("README.md", "r") as fh:
-    long_description = fh.read()
 
-setuptools.setup(
-    name="acton_sp2150",
-    use_scm_version=True,
-    setup_requires=["setuptools_scm"],
-    author="James Ball",
-    author_email="",
-    description="Princeton Instruments Acton SP2150 monochromator control library",
-    long_description=long_description,
-    long_description_content_type="text/markdown",
-    url="https://github.com/jmball/acton_sp2150",
-    py_modules=["sp2150", "virtual_sp2150"],
-    classifiers=[
-        "Programming Language :: Python :: 3",
-        "License :: OSI Approved :: MIT",
-        "Operating System :: OS Independent",
-    ],
-)
+setup()
