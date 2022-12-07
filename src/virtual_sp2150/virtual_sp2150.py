@@ -14,6 +14,10 @@ class sp2150:
         self._turret_info = "dummy info"
         self._filter = 1
 
+        self._write_termination = "\r"
+        self._read_termination = " ok\r\n"
+        self.instr = None
+
     def __enter__(self):
         """Enter the runtime context related to this object."""
         return self
@@ -44,13 +48,25 @@ class sp2150:
         """Disconnect instrument."""
         pass
 
-    def _setter_query(self, cmd):
-        """Send a command to set a value and validate output.
+    def _query(self, cmd):
+        """Query a command, stripping space at beginning of response and the unit.
 
-        Paramters
-        ---------
+        When echo is disabled, the first character returned is a superfluous space,
+        which can be removed.
+
+        Some responses always contain a unit. This is also stripped so properties have
+        values with the correct numeric type. The unit of a property can be found in
+        its docstring.
+
+        Parameters
+        ----------
         cmd : str
-            Command to issue.
+            Command to query.
+
+        Returns
+        -------
+        resp : str
+            Response to command with receding space and unit stripped.
         """
         pass
 
@@ -143,7 +159,6 @@ if __name__ == "__main__":
             "set_turret",
             "get_turret",
             "get_grating_info",
-            "get_turret_info",
             "set_filter",
             "get_filter",
             "home_filter",
@@ -184,8 +199,8 @@ if __name__ == "__main__":
             print(mono.turret)
         elif args.function == "get_grating_info":
             print(mono.grating_info)
-        elif args.function == "get_turret_info":
-            print(mono.turret_info)
+        # elif args.function == "get_turret_info":
+        #     print(mono.turret_info)
         elif args.function == "set_filter":
             mono.filter = args.parameter
         elif args.function == "get_filter":
