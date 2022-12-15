@@ -210,15 +210,22 @@ if __name__ == "__main__":
         "-p",
         "--parameter",
         help=(
-            "parameter for function, i.e. wavelength in nm, grating number, turret "
+            "Parameter for function, i.e. wavelength in nm, grating number, turret "
             + "number, filter number"
         ),
+    )
+    parser.add_argument(
+        "-t",
+        "--timeout",
+        type=int,
+        help=("Communications timeout in ms"),
+        default=30000,
     )
     args = parser.parse_args()
 
     # run command in context manager to ensure proper cleanup
     with sp2150() as mono:
-        mono.connect(args.resource_name)
+        mono.connect(args.resource_name, timeout=args.timeout)
 
         # call function
         if args.function == "set_scan_speed":
