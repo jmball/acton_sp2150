@@ -1,21 +1,28 @@
 # acton_sp2150
 Control a Princeton Instruments Acton SP-2150 monochromator with FA-2448 filter wheel
 
-Requires Python 3.8 or newer. Install from the repository root:
+Requires Python 3.10 or newer. Use uv for development, installation, and builds.
+From the repository root:
 
 ```sh
-python3 -m pip install .
+uv sync --locked
 ```
 
-For development, use a virtual environment and an editable installation:
+This creates `.venv` and installs the project in editable mode with the
+dependencies pinned in `uv.lock`. Run commands through uv:
 
 ```sh
-python3 -m venv .venv
-.venv/bin/python -m pip install -e .
+uv run python src/virtual_sp2150/virtual_sp2150.py get_wavelength
 ```
 
-If your Python installation does not provide `venv`, you can instead create the
-environment with `uv venv .venv` and install with `uv pip install -e .`.
+After changing dependencies in `pyproject.toml`, run `uv lock` and commit the
+updated lockfile. To install into a separate virtual environment instead of
+using the development environment:
+
+```sh
+uv venv /path/to/venv
+uv pip install --python /path/to/venv/bin/python .
+```
 
 The distribution includes the `sp2150` hardware driver and the
 `virtual_sp2150` simulator. Hardware access requires a working VISA backend;
@@ -24,6 +31,8 @@ the simulator can be used without connecting to an instrument.
 To build a source distribution and wheel:
 
 ```sh
-.venv/bin/python -m pip install build
-.venv/bin/python -m build
+uv build
 ```
+
+Licensed under MIT; see [LICENSE](LICENSE). Package metadata uses the same MIT
+license and includes the license file in distributions.

@@ -11,34 +11,39 @@ and FA-2448 filter wheel.
 - Both packages export a lowercase `sp2150` class through `__init__.py` and
   obtain `__version__` using `importlib.metadata` and the distribution name
   `acton_sp2150`, falling back to `0.0.0` when it is not installed.
-- `pyproject.toml`: Hatchling build configuration, package metadata, version,
-  dependency declarations, and explicit `src` package inclusion.
+- `pyproject.toml`: setuptools build configuration, package metadata, version,
+  dependency declarations, and `src` package discovery.
   The distribution name is `acton_sp2150`; import names are
   `sp2150` and `virtual_sp2150`.
+- `uv.lock`: committed dependency resolution for reproducible development.
+- `LICENSE`: MIT license; keep package metadata consistent with this file.
 
 ## Development and validation
 
-Use an isolated environment and install the project from the repository root:
+Default to uv for this repository. From the repository root, create or sync the
+project environment and install the package in editable mode:
 
 ```sh
-python3 -m venv .venv
-.venv/bin/python -m pip install -e .
+uv sync --locked
 ```
 
 Runtime dependencies are `pyvisa` and `pyvisa-py`. Hardware access also needs a
 working VISA backend and the dependencies appropriate to the connection type.
-The package requires Python >=3.8, matching the hardware driver's use of a
-walrus operator. Preserve that minimum when changing syntax or dependencies.
+The package requires Python >=3.10. Preserve that minimum when changing syntax
+or dependencies. Use `uv run` for project commands, `uv add`/`uv remove` for
+dependency changes, and `uv lock` after editing dependency declarations by hand.
+Commit `uv.lock` updates alongside the corresponding `pyproject.toml` changes.
+Use setuptools as the build backend; do not introduce Hatchling.
 
 There is no committed test suite, CI configuration, or configured formatter or
 linter. Choose validation appropriate to the change; do not claim a full test
 suite passed. Basic checks that do not contact hardware are:
 
 ```sh
-.venv/bin/python -m compileall -q src
-.venv/bin/python src/virtual_sp2150/virtual_sp2150.py get_wavelength
-.venv/bin/python src/virtual_sp2150/virtual_sp2150.py --help
-.venv/bin/python src/sp2150/sp2150.py --help
+uv run python -m compileall -q src
+uv run python src/virtual_sp2150/virtual_sp2150.py get_wavelength
+uv run python src/virtual_sp2150/virtual_sp2150.py --help
+uv run python src/sp2150/sp2150.py --help
 git diff --check
 ```
 
@@ -46,8 +51,7 @@ The simulator's initial wavelength is `0`. For behavioral changes, exercise
 properties and methods in a single simulator instance, or use a fake VISA
 resource/resource manager to check the hardware driver's commands, parsing,
 timeouts, and cleanup. Simulator checks alone do not validate the wire protocol.
-If a packaging check is needed, install `build` in the environment and run
-`.venv/bin/python -m build`; build outputs are ignored by Git.
+For packaging checks, run `uv build`; build outputs are ignored by Git.
 
 ## Change conventions
 
