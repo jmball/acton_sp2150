@@ -1,6 +1,30 @@
 [build-system]
-requires = [
-  "setuptools >= 40.9.0",
-  "wheel",
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "acton_sp2150"
+version = "0.0.2"
+description = "Princeton Instruments Acton SP2150 monochromator control library"
+readme = "README.md"
+requires-python = ">=3.8"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{name = "James Ball"}]
+classifiers = [
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
 ]
-build-backend = "setuptools.build_meta"
+dependencies = [
+  "pyvisa",
+  "pyvisa-py",
+]
+
+[project.urls]
+Homepage = "https://github.com/jmball/acton_sp2150"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/sp2150", "src/virtual_sp2150"]
+
+[tool.hatch.build.targets.sdist]
+include = ["/src", "/README.md", "/LICENSE", "/pyproject.toml"]

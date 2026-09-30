@@ -1,9 +1,9 @@
-from pkg_resources import get_distribution, DistributionNotFound
+from importlib.metadata import PackageNotFoundError, version
 
 # get version if package has been installed
 try:
-    __version__ = get_distribution(__name__).version
-except DistributionNotFound:
+    __version__ = version("acton_sp2150")
+except PackageNotFoundError:
     __version__ = "0.0.0"
 
 from .sp2150 import *

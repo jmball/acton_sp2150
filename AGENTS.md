@@ -9,11 +9,12 @@ and FA-2448 filter wheel.
 - `src/virtual_sp2150/virtual_sp2150.py`: in-memory simulator with a similar API
   and its own command-line example; it does not emulate VISA communication.
 - Both packages export a lowercase `sp2150` class through `__init__.py` and
-  attempt to obtain `__version__` using `pkg_resources`.
-- `setup.cfg`: package metadata, version, dependency declarations, and `src`
-  package discovery. The distribution name is `acton_sp2150`; import names are
+  obtain `__version__` using `importlib.metadata` and the distribution name
+  `acton_sp2150`, falling back to `0.0.0` when it is not installed.
+- `pyproject.toml`: Hatchling build configuration, package metadata, version,
+  dependency declarations, and explicit `src` package inclusion.
+  The distribution name is `acton_sp2150`; import names are
   `sp2150` and `virtual_sp2150`.
-- `pyproject.toml` and `setup.py`: setuptools build configuration.
 
 ## Development and validation
 
@@ -26,9 +27,8 @@ python3 -m venv .venv
 
 Runtime dependencies are `pyvisa` and `pyvisa-py`. Hardware access also needs a
 working VISA backend and the dependencies appropriate to the connection type.
-The metadata declares Python >=3.6, but the hardware driver uses a walrus
-operator and therefore currently requires Python >=3.8 to parse. Keep this
-discrepancy in mind when changing syntax or compatibility metadata.
+The package requires Python >=3.8, matching the hardware driver's use of a
+walrus operator. Preserve that minimum when changing syntax or dependencies.
 
 There is no committed test suite, CI configuration, or configured formatter or
 linter. Choose validation appropriate to the change; do not claim a full test
