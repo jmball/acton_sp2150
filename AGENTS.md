@@ -88,8 +88,10 @@ Do not skip its failures merely because that command previously had firmware iss
   The simulator must match public signatures, connection-state errors, and numeric
   conversions/precision. Keep the shared contract current when the API changes.
 - Preserve protocol details intentionally: writes terminate with `\r`, reads
-  with ` ok\r\n`, connection setup sends `NO-ECHO`, and `_query` removes the
-  leading space and unit. `_query_manual` reads one byte at a time to handle
+  with ` ok\r\n`, and connection setup sends `NO-ECHO`. `_write`, `_query`,
+  and `_read_bytes` check connection state; `_query` returns the unparsed PyVISA
+  response and `_query_value` removes the leading space and unit.
+  `_query_manual` reads one byte at a time to handle
   partial termination sequences. Use the module constants ENCODING,
   WRITE_TERMINATION, and READ_TERMINATION for setup and manual response parsing.
 - The driver warns with UserWarning and discards overrides of termination,

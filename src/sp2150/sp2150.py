@@ -147,13 +147,25 @@ class sp2150:
         if instr is not None:
             instr.close()
 
-    def _require_connection(self) -> MessageBasedResource:
-        """Return the live resource or raise a clear connection-state error."""
+    def _write(self, cmd: str) -> None:
+        """Send a command, requiring an active connection."""
         if self._instr is None:
             raise RuntimeError("Instrument is not connected")
-        return self._instr
+        self._instr.write(cmd)
 
     def _query(self, cmd: str) -> str:
+        """Send a command and return the unparsed PyVISA response."""
+        if self._instr is None:
+            raise RuntimeError("Instrument is not connected")
+        return self._instr.query(cmd)
+
+    def _read_bytes(self, count: int) -> bytes:
+        """Read bytes, requiring an active connection."""
+        if self._instr is None:
+            raise RuntimeError("Instrument is not connected")
+        return self._instr.read_bytes(count)
+
+    def _query_value(self, cmd: str) -> str:
         """Query a command, stripping space at beginning of the response and the unit.
 
         When echo is disabled, the first character returned is a superfluous space,
@@ -173,7 +185,7 @@ class sp2150:
         resp : str
             Response to command with receding space and unit stripped.
         """
-        return self._require_connection().query(cmd)[1:].split(" ")[0]
+        return self._query(cmd)[1:].split(" ")[0]
 
     def _query_manual(self, cmd: str) -> str:
         """Query a command manually looking for the termination character.
@@ -193,27 +205,28 @@ class sp2150:
             Response to command with receding space and unit stripped.
         """
         resp = b""
-        instr = self._require_connection()
-        instr.write(cmd)
+        self._write(cmd)
         terminator = READ_TERMINATION.encode(ENCODING)
         while not resp.endswith(terminator):
-            resp += instr.read_bytes(1)
+            resp += self._read_bytes(1)
 
         return resp.decode(ENCODING).removesuffix(READ_TERMINATION).strip()
 
     @property
     def scan_speed(self) -> float:
         """Get grating scan speed in nm/min."""
-        return float(self._query("?NM/MIN"))
+        return float(self._query_value("?NM/MIN"))
 
     @scan_speed.setter
     def scan_speed(self, speed: Number) -> None:
         """Set grating scan speed in nm/min."""
-        self._require_connection().query(f"{float(speed):.1f} NM/MIN")
+        self._query(f"{float(speed):.1f} NM/MIN")
 
     def scan_to_wavelength(self, wavelength: Number) -> None:
         """Scan grating to wavelength in nm."""
-        instr = self._require_connection()
+        instr = self._instr
+        if instr is None:
+            raise RuntimeError("Instrument is not connected")
         wavelength = float(wavelength)
         # calculate scan time in ms
         scan_time = abs(wavelength - self.wavelength) * 60000 / self.scan_speed
@@ -226,7 +239,7 @@ class sp2150:
 
         # run the scan
         try:
-            instr.query(f"{wavelength:.1f} NM")
+            self._query(f"{wavelength:.1f} NM")
         finally:
             if long_scan:
                 instr.timeout = old_timeout
@@ -234,32 +247,32 @@ class sp2150:
     @property
     def wavelength(self) -> float:
         """Get current grating wavelength position in nm."""
-        return float(self._query("?NM"))
+        return float(self._query_value("?NM"))
 
     @wavelength.setter
     def wavelength(self, wavelength: Number) -> None:
         """Set grating position for wavelength in nm."""
-        self._require_connection().query(f"{float(wavelength):.1f} GOTO")
+        self._query(f"{float(wavelength):.1f} GOTO")
 
     @property
     def grating(self) -> int:
         """Get grating number."""
-        return int(self._query("?GRATING"))
+        return int(self._query_value("?GRATING"))
 
     @grating.setter
     def grating(self, grating: Integer) -> None:
         """Set grating number."""
-        self._require_connection().query(f"{int(grating)} GRATING")
+        self._query(f"{int(grating)} GRATING")
 
     @property
     def turret(self) -> int:
         """Get turret number."""
-        return int(self._query("?TURRET"))
+        return int(self._query_value("?TURRET"))
 
     @turret.setter
     def turret(self, turret: Integer) -> None:
         """Set turrent number."""
-        self._require_connection().query(f"{int(turret)} TURRET")
+        self._query(f"{int(turret)} TURRET")
 
     @property
     def grating_info(self) -> str:
@@ -274,16 +287,16 @@ class sp2150:
     @property
     def filter(self) -> int:
         """Get filter wheel position number."""
-        return int(self._query("?FILTER"))
+        return int(self._query_value("?FILTER"))
 
     @filter.setter
     def filter(self, filter_pos: Integer) -> None:
         """Set filter wheel position number."""
-        self._require_connection().query(f"{int(filter_pos)} FILTER")
+        self._query(f"{int(filter_pos)} FILTER")
 
     def home_filter(self) -> None:
         """Set filter wheel to home position."""
-        self._require_connection().query("FHOME")
+        self._query("FHOME")
 
 
 if __name__ == "__main__":

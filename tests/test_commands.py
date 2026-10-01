@@ -47,6 +47,19 @@ class CommandTests(unittest.TestCase):
         self.device.home_filter()
         self.assertEqual(self.resource.commands, ["FHOME"])
 
+    def test_query_preserves_response_while_property_parses_value(self):
+        self.assertEqual(self.device._query("?NM/MIN"), " 1000.0 nm/min")
+        self.assertEqual(self.device.scan_speed, 1000.0)
+
+    def test_disconnected_communication_does_not_reach_resource(self):
+        self.device.disconnect()
+        for method, argument in (("_write", "?TURRETS"), ("_query", "FHOME"),
+                                 ("_read_bytes", 1)):
+            with self.subTest(method=method), self.assertRaisesRegex(RuntimeError, "not connected"):
+                getattr(self.device, method)(argument)
+        self.assertEqual(self.resource.commands, [])
+        self.assertEqual(self.resource._pending, b"")
+
     def test_information_commands_preserve_internal_newlines_and_trailing_letters(self):
         for name, command in (("grating_info", "?GRATINGS"), ("turret_info", "?TURRETS")):
             with self.subTest(name=name):
