@@ -3,43 +3,42 @@
 from __future__ import annotations
 
 import logging
+import warnings
 from types import TracebackType
-from typing import Any
+from typing import Any, Final
 
 import pyvisa
 from pyvisa import constants
-from pyvisa.resources import MessageBasedResource, Resource, SerialInstrument
+from pyvisa.resources import MessageBasedResource, SerialInstrument
 
 
 _LOGGER = logging.getLogger(__name__)
 Number = float | str
 Integer = int | str
 
+ENCODING: Final[str] = "ASCII"
+WRITE_TERMINATION: Final[str] = "\r"
+READ_TERMINATION: Final[str] = " ok\r\n"
+
 # Protocol and serial framing belong to the device, not to callers.
 _FIXED_OPTIONS = frozenset({
     "read_termination", "write_termination", "encoding", "baud_rate",
     "data_bits", "parity", "stop_bits", "flow_control", "end_input", "end_output",
+    "resource_pyclass",
 })
 
 
-def _validate_fixed_options(options: dict[str, Any]) -> None:
-    """Reject overrides, including values equal to the device defaults."""
-    if "resource_pyclass" in options:
-        raise TypeError("resource_pyclass is managed by PyVISA and cannot be overridden")
+def _discard_fixed_options(options: dict[str, Any]) -> None:
+    """Warn and discard overrides, including matching device defaults."""
     fixed = _FIXED_OPTIONS.intersection(options)
     if fixed:
-        raise ValueError(
-            "Device settings are managed by the driver and cannot be configured: "
-            + ", ".join(sorted(fixed))
+        for name in fixed:
+            options.pop(name)
+        warnings.warn(
+            "Ignoring driver-managed resource options: " + ", ".join(sorted(fixed)),
+            UserWarning,
+            stacklevel=3,
         )
-
-
-def _close_after_failure(instr: Resource) -> None:
-    """Preserve the original failure even if closing the session also fails."""
-    try:
-        instr.close()
-    except Exception:
-        _LOGGER.warning("Failed to close the instrument after an error", exc_info=True)
 
 
 class sp2150:
@@ -47,8 +46,6 @@ class sp2150:
 
     def __init__(self) -> None:
         """Construct object."""
-        self._write_termination = "\r"
-        self._read_termination = " ok\r\n"
         self.instr: MessageBasedResource | None = None
         self._resource_manager: pyvisa.ResourceManager | None = None
 
@@ -92,16 +89,15 @@ class sp2150:
         resource_kwargs : dict
             Options forwarded to PyVISA open_resource for validation and application
             (e.g. timeout in ms, query_delay in seconds, access_mode). Device
-            termination, ASCII encoding, and serial settings cannot be supplied.
+            termination, ASCII encoding, serial settings, and resource class
+            overrides are discarded with a UserWarning.
 
         Raises
         ------
         RuntimeError
             Already connected. Disconnect explicitly before reconnecting.
-        ValueError
-            Attempt to configure a fixed device setting.
         TypeError
-            Resource class override or a resource that is not message-based.
+            A resource that is not message-based.
 
         Notes
         -----
@@ -112,27 +108,31 @@ class sp2150:
         """
         if self.instr is not None:
             raise RuntimeError("Already connected; disconnect before reconnecting")
-        _validate_fixed_options(resource_kwargs)
+        _discard_fixed_options(resource_kwargs)
         if resource_manager is None:
             resource_manager = pyvisa.ResourceManager()
         instr = resource_manager.open_resource(resource_name, **resource_kwargs)
         try:
             if not isinstance(instr, MessageBasedResource):
                 raise TypeError("The instrument requires a message-based VISA resource")
-            instr.encoding = "ASCII"
-            instr.write_termination = self._write_termination
-            instr.read_termination = self._read_termination
+            instr.encoding = ENCODING
+            instr.write_termination = WRITE_TERMINATION
+            instr.read_termination = READ_TERMINATION
             if isinstance(instr, SerialInstrument):
                 instr.baud_rate = 9600
                 instr.data_bits = 8
                 instr.parity = constants.Parity.none
                 instr.stop_bits = constants.StopBits.one
                 instr.flow_control = constants.ControlFlow.none
+                # Stop on the final read-termination byte; writes already append CR.
                 instr.end_input = constants.SerialTermination.termination_char
                 instr.end_output = constants.SerialTermination.none
             instr.query("NO-ECHO")
         except BaseException:
-            _close_after_failure(instr)
+            try:
+                instr.close()
+            except Exception:
+                _LOGGER.warning("Failed to close the instrument after an error", exc_info=True)
             raise
         self.instr = instr
         self._resource_manager = resource_manager
@@ -199,10 +199,11 @@ class sp2150:
         resp = b""
         instr = self._require_connection()
         instr.write(cmd)
-        while resp.endswith(self._read_termination.encode("ASCII")) is False:
+        terminator = READ_TERMINATION.encode(ENCODING)
+        while not resp.endswith(terminator):
             resp += instr.read_bytes(1)
 
-        return resp.decode("ASCII").removesuffix(self._read_termination).strip()
+        return resp.decode(ENCODING).removesuffix(READ_TERMINATION).strip()
 
     @property
     def scan_speed(self) -> float:

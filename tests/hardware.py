@@ -17,7 +17,7 @@ import unittest
 import pyvisa
 
 from sp2150 import sp2150
-from sp2150.sp2150 import _validate_fixed_options
+from sp2150.sp2150 import _discard_fixed_options
 from tests.contract import InstrumentContract
 
 
@@ -157,10 +157,7 @@ def parse_options(argv: Sequence[str] | None = None) -> tuple[HardwareOptions, l
         if isinstance(decoded, (dict, list)):
             parser.error("resource options must be JSON scalar values")
         resource_options[key] = decoded
-    try:
-        _validate_fixed_options(resource_options)
-    except (ValueError, TypeError) as exc:
-        parser.error(str(exc))
+    _discard_fixed_options(resource_options)
     options = HardwareOptions(
         resource_name=args.resource_name,
         visa_backend=args.visa_backend,

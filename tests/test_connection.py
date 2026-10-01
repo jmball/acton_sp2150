@@ -49,7 +49,7 @@ class ConnectionTests(unittest.TestCase):
         self.assertEqual(self.resource.chunk_size, 512)
         self.assertIs(self.device._resource_manager, self.manager)
 
-    def test_fixed_options_are_rejected_even_when_matching_defaults(self):
+    def test_fixed_options_warn_and_are_ignored_even_when_matching_defaults(self):
         options = {
             "read_termination": " ok\r\n", "write_termination": "\r",
             "encoding": "ASCII", "baud_rate": 9600, "data_bits": 8,
@@ -59,10 +59,32 @@ class ConnectionTests(unittest.TestCase):
             "end_output": constants.SerialTermination.none,
         }
         for name, value in options.items():
-            with self.subTest(name=name), self.assertRaisesRegex(ValueError, name):
+            with self.subTest(name=name), self.assertWarnsRegex(UserWarning, name):
                 self.connect(**{name: value})
-        self.manager.open_resource.assert_not_called()
-        self.assertIsNone(self.device.instr)
+            self.manager.open_resource.assert_called_with("serial-alias")
+            self.assertIs(self.device.instr, self.resource)
+            self.device.disconnect()
+            simulator = virtual_sp2150()
+            with self.assertWarnsRegex(UserWarning, name):
+                simulator.connect("dummy", **{name: value})
+            self.assertEqual(simulator.wavelength, 0.0)
+            simulator.disconnect()
+
+    def test_conflicting_fixed_options_are_removed_before_opening(self):
+        options = {"baud_rate": 115200, "encoding": "UTF-8",
+                   "read_termination": "x", "write_termination": "\n",
+                   "end_output": constants.SerialTermination.termination_char,
+                   "timeout": 5000}
+        with self.assertWarnsRegex(UserWarning, "baud_rate.*encoding.*end_output.*read_termination.*write_termination"):
+            self.connect(**options)
+        self.manager.open_resource.assert_called_once_with("serial-alias", timeout=5000)
+        self.assertEqual(options["baud_rate"], 115200)
+        self.assertEqual(self.resource.baud_rate, 9600)
+        self.assertEqual(self.resource.encoding, "ASCII")
+        self.assertEqual(self.resource.read_termination, " ok\r\n")
+        self.assertEqual(self.resource.write_termination, "\r")
+        self.assertEqual(self.resource.end_output, constants.SerialTermination.none)
+        self.assertEqual(self.resource.timeout, 5000)
 
     def test_pyvisa_option_errors_are_propagated_without_driver_cleanup(self):
         error = ValueError("PyVISA rejected timeuot")
@@ -75,9 +97,11 @@ class ConnectionTests(unittest.TestCase):
         self.assertIsNone(self.device.instr)
 
     def test_resource_class_override_cannot_bypass_fixed_serial_configuration(self):
-        with self.assertRaisesRegex(TypeError, "resource_pyclass"):
+        with self.assertWarnsRegex(UserWarning, "resource_pyclass"):
             self.connect(resource_pyclass=FakeMessage)
-        self.manager.open_resource.assert_not_called()
+        self.manager.open_resource.assert_called_once_with("serial-alias")
+        self.assertIs(self.device.instr, self.resource)
+        self.assertEqual(self.resource.baud_rate, 9600)
 
     def test_writable_interface_specific_attribute_is_supported(self):
         self.connect(discard_null=True)
@@ -214,8 +238,9 @@ class ConnectionTests(unittest.TestCase):
     def test_simulator_validates_options_and_reconnection_without_hardware(self):
         device = virtual_sp2150()
         with patch("pyvisa.ResourceManager") as factory:
-            with self.assertRaises(ValueError):
+            with self.assertWarnsRegex(UserWarning, "baud_rate"):
                 device.connect("ASRL2::INSTR", baud_rate=9600)
+            device.disconnect()
             device.connect("ASRL2::INSTR", timeout=2000)
             with self.assertRaises(RuntimeError):
                 device.connect("ASRL2::INSTR")

@@ -128,7 +128,6 @@ class HardwareRunnerTests(unittest.TestCase):
 
     def test_invalid_cli_options_never_create_a_manager(self):
         for extra in (
-            ["--resource-option", "baud_rate=9600"],
             ["--resource-option", "timeout=1000"],
             ["--resource-option", "query_delay=broken"],
             ["--resource-option", "query_delay=0.1", "--resource-option", "query_delay=0.2"],
@@ -141,6 +140,21 @@ class HardwareRunnerTests(unittest.TestCase):
                     hardware.main(self.arguments + extra, manager_factory=factory)
                 self.assertEqual(error.exception.code, 2)
                 factory.assert_not_called()
+
+    def test_fixed_cli_options_warn_and_use_device_configuration(self):
+        output = io.StringIO()
+        with self.assertWarnsRegex(UserWarning, "baud_rate.*encoding"):
+            result = hardware.main(
+                self.arguments + ["--resource-option", "baud_rate=115200",
+                                  "--resource-option", 'encoding="UTF-8"',
+                                  "--test", "test_filter"],
+                manager_factory=self.manager_factory, stream=output,
+            )
+        self.assertEqual(result, 0, output.getvalue())
+        self.managers[0].open_resource.assert_called_once_with("ASRL2::INSTR", timeout=30000)
+        self.assertEqual(self.resources[0].baud_rate, 9600)
+        self.assertEqual(self.resources[0].encoding, "ASCII")
+        self.assert_restored_and_closed()
 
     def test_hardware_targets_are_required_before_any_connection(self):
         with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):

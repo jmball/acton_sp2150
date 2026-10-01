@@ -6,7 +6,7 @@ from types import TracebackType
 from typing import Any
 
 import pyvisa
-from sp2150.sp2150 import Integer, Number, _validate_fixed_options
+from sp2150.sp2150 import Integer, Number, _discard_fixed_options
 
 
 class sp2150:
@@ -22,8 +22,6 @@ class sp2150:
         self._turret_info = "dummy info"
         self._filter = 1
 
-        self._write_termination = "\r"
-        self._read_termination = " ok\r\n"
         self.instr: None = None
         self._connected = False
 
@@ -59,12 +57,12 @@ class sp2150:
             Accepted for API compatibility. Never used or closed by the simulator.
         resource_kwargs : dict
             Accepted and ignored without contacting a VISA backend. Fixed device
-            settings and resource class overrides are rejected like the driver;
+            settings and resource class overrides warn like the driver;
             other options are not validated by the simulator.
         """
         if self._connected:
             raise RuntimeError("Already connected; disconnect before reconnecting")
-        _validate_fixed_options(resource_kwargs)
+        _discard_fixed_options(resource_kwargs)
         self._connected = True
 
     def disconnect(self) -> None:

@@ -53,11 +53,16 @@ The driver manages ASCII encoding, write termination `\r`, and read termination
 ` ok\r\n`. For serial resources it also sets 9600 baud, 8 data bits, no parity,
 one stop bit, and no flow control. The framing requirements are documented in
 the [SP-2150i operating instructions, section IV-B](https://www.princetoninstruments.com/wp-content/uploads/2020/04/SP-2150i.pdf).
-Passing any of these fixed settings, including matching values, raises
-`ValueError`. Other resource options are passed directly to PyVISA's
+Passing any of these fixed settings, including matching values, emits a
+`UserWarning` and ignores the override. Other resource options are passed directly
+to PyVISA's
 `open_resource()` for validation and application; accepted options and errors
 follow PyVISA and the selected backend. `resource_pyclass`
-overrides are not supported: PyVISA selects the interface from the resource name.
+overrides also warn and are ignored: PyVISA selects the interface from the
+resource name.
+For serial resources, `end_input` stops reads at the final newline and
+`end_output` disables extra backend termination; these settings work with the
+driver's read and write termination strings.
 
 Failures during driver initialization after PyVISA returns a resource close that
 session and leave the driver disconnected. Failures within `open_resource()` use
@@ -69,8 +74,8 @@ shares managers between callers. Supplied managers remain caller-owned; default
 managers follow PyVISA's shared lifetime. Context cleanup preserves an exception
 already raised by the body and logs any additional close failure.
 
-The simulator accepts the same keyword-only manager and rejects fixed device
-overrides without opening hardware. Other backend options are accepted and
+The simulator accepts the same keyword-only manager and warns and ignores fixed
+device overrides without opening hardware. Other backend options are accepted and
 ignored; the simulator does not reproduce PyVISA option validation errors.
 It supports the same explicit reconnect
 behavior and converts numeric setters to the hardware driver's numeric types;
@@ -112,7 +117,7 @@ Restoration failures are reported and the remaining cleanup steps still run.
 
 Use `--resource-option 'query_delay=0.05'` for additional connection options
 (`KEY=JSON`, repeatable), or `--resource-option 'open_timeout=2000'` for opening
-options. Fixed device settings remain prohibited. The expected filter home
+options. Fixed device settings warn and are ignored. The expected filter home
 position defaults to 1 and can be set with `--home-filter-position`.
 `--visa-backend` can be omitted to use the system-selected backend. Backend
 dependencies must be installed; for serial communication with `@py`, include
