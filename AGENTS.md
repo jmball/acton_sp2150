@@ -100,8 +100,9 @@ Do not skip its failures merely because that command previously had firmware iss
   without attempting to duplicate backend validation. Resource class overrides
   also warn and are discarded so they cannot bypass serial configuration.
   The resource manager is
-  keyword-only and retained while connected, but never closed by the driver
-  because PyVISA shares manager sessions. Disconnect explicitly before reconnecting.
+  keyword-only and retained by the PyVISA resource, but never closed by the driver
+  because PyVISA shares manager sessions. Do not store a separate manager reference
+  on the driver. Disconnect explicitly before reconnecting.
   The underlying VISA resource is private (`_instr`); callers use the driver API
   for commands and connection lifecycle.
 - Wavelengths are in nm, scan speed is in nm/min, and VISA timeouts are in ms.

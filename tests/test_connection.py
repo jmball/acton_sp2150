@@ -47,7 +47,6 @@ class ConnectionTests(unittest.TestCase):
         self.assertEqual(self.resource.timeout, 5000)
         self.assertEqual(self.resource.query_delay, 0.1)
         self.assertEqual(self.resource.chunk_size, 512)
-        self.assertIs(self.device._resource_manager, self.manager)
 
     def test_fixed_options_warn_and_are_ignored_even_when_matching_defaults(self):
         options = {
@@ -123,10 +122,10 @@ class ConnectionTests(unittest.TestCase):
         )
         self.assertEqual(self.resource.timeout, 3000)
 
-    def test_default_manager_is_retained_but_not_closed(self):
+    def test_default_manager_opens_resource_but_is_not_closed(self):
         with patch("pyvisa.ResourceManager", return_value=self.manager):
             self.device.connect("ASRL2::INSTR")
-        self.assertIs(self.device._resource_manager, self.manager)
+        self.manager.open_resource.assert_called_once_with("ASRL2::INSTR")
         self.device.disconnect()
         self.manager.close.assert_not_called()
 
@@ -147,7 +146,6 @@ class ConnectionTests(unittest.TestCase):
         self.device.disconnect()
         self.assertEqual(self.resource.close_count, 1)
         self.assertIsNone(self.device._instr)
-        self.assertIsNone(self.device._resource_manager)
         self.manager.close.assert_not_called()
 
     def test_disconnect_clears_state_even_when_close_fails(self):
@@ -156,7 +154,6 @@ class ConnectionTests(unittest.TestCase):
         with self.assertRaises(OSError):
             self.device.disconnect()
         self.assertIsNone(self.device._instr)
-        self.assertIsNone(self.device._resource_manager)
         self.device.disconnect()
 
     def test_open_failure_leaves_device_disconnected(self):
@@ -164,7 +161,6 @@ class ConnectionTests(unittest.TestCase):
         with self.assertRaisesRegex(OSError, "open failed"):
             self.connect()
         self.assertIsNone(self.device._instr)
-        self.assertIsNone(self.device._resource_manager)
         self.manager.close.assert_not_called()
 
     def test_option_value_failure_inside_open_resource_leaves_driver_disconnected(self):
@@ -173,7 +169,6 @@ class ConnectionTests(unittest.TestCase):
             self.connect(timeout=2000)
         self.assertEqual(self.resource.close_count, 0)
         self.assertIsNone(self.device._instr)
-        self.assertIsNone(self.device._resource_manager)
         self.manager.close.assert_not_called()
 
     def test_fixed_serial_attribute_failure_closes_partial_connection(self):

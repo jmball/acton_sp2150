@@ -47,7 +47,6 @@ class sp2150:
     def __init__(self) -> None:
         """Construct object."""
         self._instr: MessageBasedResource | None = None
-        self._resource_manager: pyvisa.ResourceManager | None = None
 
     def __enter__(self) -> sp2150:
         """Enter the runtime context related to this object."""
@@ -85,7 +84,8 @@ class sp2150:
         resource_manager : pyvisa.ResourceManager, optional
             Resource manager used to create new connection. If `None`, create a new
             resource manager using the default VISA backend. Managers are shared
-            by PyVISA: this driver retains the manager but never closes it.
+            by PyVISA: the instrument resource retains the manager, and this driver
+            never closes it.
         resource_kwargs : dict
             Options forwarded to PyVISA open_resource for validation and application
             (e.g. timeout in ms, query_delay in seconds, access_mode). Device
@@ -135,7 +135,6 @@ class sp2150:
                 _LOGGER.warning("Failed to close the instrument after an error", exc_info=True)
             raise
         self._instr = instr
-        self._resource_manager = resource_manager
 
     def disconnect(self) -> None:
         """Close this instrument session; repeated calls are harmless.
@@ -145,11 +144,8 @@ class sp2150:
         """
         instr = self._instr
         self._instr = None
-        try:
-            if instr is not None:
-                instr.close()
-        finally:
-            self._resource_manager = None
+        if instr is not None:
+            instr.close()
 
     def _require_connection(self) -> MessageBasedResource:
         """Return the live resource or raise a clear connection-state error."""

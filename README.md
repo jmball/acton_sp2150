@@ -68,9 +68,9 @@ Failures during driver initialization after PyVISA returns a resource close that
 session and leave the driver disconnected. Failures within `open_resource()` use
 PyVISA's own cleanup. Calling `connect()` while connected raises `RuntimeError`;
 call `disconnect()` first to reconnect. Disconnecting repeatedly is safe and
-clears connection state even if closing fails. The driver retains its resource
-manager while connected but closes only its instrument session, since PyVISA
-shares managers between callers. Supplied managers remain caller-owned; default
+clears connection state even if closing fails. The PyVISA resource retains its
+manager; the driver closes only its instrument session, since PyVISA shares
+managers between callers. Supplied managers remain caller-owned; default
 managers follow PyVISA's shared lifetime. Context cleanup preserves an exception
 already raised by the body and logs any additional close failure.
 
