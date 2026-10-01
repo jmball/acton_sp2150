@@ -228,7 +228,7 @@ class sp2150:
         while resp.endswith(self._read_termination.encode("ASCII")) is False:
             resp += instr.read_bytes(1)
 
-        return resp.decode("ASCII").strip(self._read_termination)
+        return resp.decode("ASCII").removesuffix(self._read_termination).strip()
 
     @property
     def scan_speed(self) -> float:
@@ -295,11 +295,10 @@ class sp2150:
         """Get groove spacing and blaze wavelength of each grating."""
         return self._query_manual("?GRATINGS")
 
-    # TODO: figure out why this command isn't recognised
-    # @property
-    # def turret_info(self):
-    #     """Get groove spacing of each grating on each turret."""
-    #     return self._query_manual("?TURRETS")
+    @property
+    def turret_info(self) -> str:
+        """Get groove spacing of each grating on each turret."""
+        return self._query_manual("?TURRETS")
 
     @property
     def filter(self) -> int:
@@ -336,6 +335,7 @@ if __name__ == "__main__":
             "set_turret",
             "get_turret",
             "get_grating_info",
+            "get_turret_info",
             "set_filter",
             "get_filter",
             "home_filter",
@@ -383,8 +383,8 @@ if __name__ == "__main__":
             print(mono.turret)
         elif args.function == "get_grating_info":
             print(mono.grating_info)
-        # elif args.function == "get_turret_info":
-        #     print(mono.turret_info)
+        elif args.function == "get_turret_info":
+            print(mono.turret_info)
         elif args.function == "set_filter":
             mono.filter = args.parameter
         elif args.function == "get_filter":

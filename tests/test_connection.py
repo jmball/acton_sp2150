@@ -4,51 +4,11 @@ import unittest
 from unittest.mock import Mock, patch
 
 from pyvisa import constants
-from pyvisa.resources import MessageBasedResource, Resource, SerialInstrument
+from pyvisa.resources import Resource
 
 from sp2150 import sp2150
 from virtual_sp2150 import sp2150 as virtual_sp2150
-
-
-class FakeResourceMixin:
-    """Exercise real PyVISA attribute descriptors without opening a session."""
-
-    def __init__(self):
-        self._session = None
-        self.values = {constants.ResourceAttribute.timeout_value: 1000}
-        self.commands = []
-        self.close_count = 0
-        self.fail_attribute = None
-        self.fail_command = None
-        self.fail_close = False
-
-    def set_visa_attribute(self, name, value):
-        if name == self.fail_attribute:
-            raise ValueError("attribute rejected")
-        self.values[name] = value
-        return constants.StatusCode.success
-
-    def get_visa_attribute(self, name):
-        return self.values[name]
-
-    def query(self, command):
-        self.commands.append(command)
-        if command == self.fail_command:
-            raise TimeoutError("query failed")
-        return {"?NM": " 0.0 nm", "?NM/MIN": " 60.0 nm/min"}.get(command, "")
-
-    def close(self):
-        self.close_count += 1
-        if self.fail_close:
-            raise OSError("close failed")
-
-
-class FakeSerial(FakeResourceMixin, SerialInstrument):
-    pass
-
-
-class FakeMessage(FakeResourceMixin, MessageBasedResource):
-    pass
+from tests.fakes import FakeMessage, FakeSerial
 
 
 class ConnectionTests(unittest.TestCase):

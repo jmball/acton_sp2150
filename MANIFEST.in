@@ -1,0 +1,2 @@
+# Keep the source archive's tests runnable, including their shared helpers.
+recursive-include tests *.py

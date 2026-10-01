@@ -71,10 +71,53 @@ already raised by the body and logs any additional close failure.
 The simulator accepts the same keyword-only manager and validates resource
 options without opening hardware. It supports the same explicit reconnect
 behavior and converts numeric setters to the hardware driver's numeric types;
-its in-memory properties remain usable without connecting.
+operations require `connect()` just as they do with the hardware driver.
+Wavelength and scan speed use the same one-decimal precision, and state persists
+across disconnect/reconnect. Simulation uses immediate in-memory state changes;
+it does not emulate movement time, hardware faults, or installed grating limits.
 
-Run the hardware-free regression tests with:
+The test suite has three complementary layers:
+
+- Simulator state tests and a shared API contract check experiment behavior,
+  matching signatures, property access, numeric conversions, and connection state.
+- Fake VISA resources check exact wire commands, parsing, timeouts, configuration,
+  and failure cleanup. The shared contract also runs against the fake-backed driver.
+- The explicit hardware runner applies the same command contract to an attached
+  instrument, including `?GRATINGS`, the reinstated `?TURRETS`, scanning, direct
+  positioning, grating/turret selection, filter positioning, and filter homing.
+
+Run all hardware-free tests (the default discovery never contacts hardware):
 
 ```sh
-uv run python -m unittest discover -s tests -v
+uv run python -m unittest discover -s tests -t . -v
 ```
+
+Run the hardware suite explicitly with targets valid for your instrument:
+
+```sh
+uv run python -m tests.hardware \
+  --resource-name 'ASRL2::INSTR' --visa-backend '@py' --timeout 30000 \
+  --wavelength 500 --scan-wavelength 501 --scan-speed 600 \
+  --turret 1 --grating 1 --filter-position 2
+```
+
+The runner moves the instrument. It requires explicit wavelength targets and
+installed grating, turret, and filter positions. Before each test it reads the
+initial settings; afterward it attempts to restore turret, grating, scan speed,
+wavelength, and filter position, then disconnects and closes its own manager.
+Restoration failures are reported and the remaining cleanup steps still run.
+
+Use `--resource-option 'query_delay=0.05'` for additional connection options
+(`KEY=JSON`, repeatable), or `--resource-option 'open_timeout=2000'` for opening
+options. Fixed device settings remain prohibited. The expected filter home
+position defaults to 1 and can be set with `--home-filter-position`.
+`--visa-backend` can be omitted to use the system-selected backend. Backend
+dependencies must be installed; for serial communication with `@py`, include
+pyserial with `uv run --with pyserial python -m tests.hardware ...`.
+
+Add `--test test_turret_information` to the complete command above to isolate
+`?TURRETS`, or repeat `--test` to select multiple tests. An unsupported command
+is reported as an ordinary failure/error, so the hardware result remains visible.
+Run `uv run python -m tests.hardware --help` for all CLI options. Tests have been
+validated against fake resources; actual hardware results depend on the connected
+instrument and its firmware.

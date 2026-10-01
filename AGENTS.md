@@ -16,6 +16,8 @@ and FA-2448 filter wheel.
   The distribution name is `acton_sp2150`; import names are
   `sp2150` and `virtual_sp2150`.
 - `uv.lock`: committed dependency resolution for reproducible development.
+- `MANIFEST.in`: includes the complete test tree in source archives. Installation
+  metadata and build configuration remain in `pyproject.toml`.
 - `LICENSE`: MIT license; keep package metadata consistent with this file.
 
 ## Development and validation
@@ -35,12 +37,21 @@ dependency changes, and `uv lock` after editing dependency declarations by hand.
 Commit `uv.lock` updates alongside the corresponding `pyproject.toml` changes.
 Use setuptools as the build backend; do not introduce Hatchling.
 
-`tests/test_connection.py` contains standard-library unittest regressions using
-fake VISA resources, including connection validation, ownership, initialization
-failures, and cleanup. Run them without hardware:
+Tests use standard-library unittest:
+
+- `tests/test_virtual.py`: simulator state, lifecycle, and simulated experiments.
+- `tests/contract.py` and `tests/test_contract.py`: shared command behavior for the
+  simulator and fake-backed driver, plus public signature/property parity.
+- `tests/test_commands.py` and `tests/test_connection.py`: exact VISA commands,
+  parsing, configuration, ownership, timeouts, and failure cleanup.
+- `tests/hardware.py`: explicitly invoked integration runner against real hardware.
+  It is outside the discovery pattern and must never connect during default tests.
+- `tests/test_hardware_runner.py`: tests the integration runner using fake resources.
+
+Run the default suite without hardware:
 
 ```sh
-uv run python -m unittest discover -s tests -v
+uv run python -m unittest discover -s tests -t . -v
 ```
 
 There is no CI configuration or configured formatter or linter. Choose
@@ -54,11 +65,16 @@ uv run python src/sp2150/sp2150.py --help
 git diff --check
 ```
 
-The simulator's initial wavelength is `0`. For behavioral changes, exercise
+The simulator's initial wavelength is `0` after connection. For behavioral changes, exercise
 properties and methods in a single simulator instance, or use a fake VISA
 resource/resource manager to check the hardware driver's commands, parsing,
 timeouts, and cleanup. Simulator checks alone do not validate the wire protocol.
 For packaging checks, run `uv build`; build outputs are ignored by Git.
+The real-hardware suite is invoked with `uv run python -m tests.hardware` and
+explicit resource, wavelength, grating, turret, and filter arguments (see README).
+It exercises all public commands and attempts state restoration after each test.
+Use `--test test_turret_information` to isolate the reinstated `?TURRETS` command.
+Do not skip its failures merely because that command previously had firmware issues.
 
 ## Change conventions
 
@@ -67,8 +83,10 @@ For packaging checks, run `uv build`; build outputs are ignored by Git.
 - Preserve public imports, method signatures, and context-manager behavior
   unless the requested change requires an API change.
 - For shared API changes, review the hardware driver, simulator, and both CLI
-  dispatch blocks. The simulator implements `turret_info`, which is disabled in
-  the hardware driver because `?TURRETS` was not recognized.
+  dispatch blocks. Both implementations expose `turret_info`; `?TURRETS` has
+  historically had hardware issues, which the integration suite should expose.
+  The simulator must match public signatures, connection-state errors, and numeric
+  conversions/precision. Keep the shared contract current when the API changes.
 - Preserve protocol details intentionally: writes terminate with `\r`, reads
   with ` ok\r\n`, connection setup sends `NO-ECHO`, and `_query` removes the
   leading space and unit. `_query_manual` reads one byte at a time to handle

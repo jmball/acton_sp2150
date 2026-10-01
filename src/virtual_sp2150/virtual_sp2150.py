@@ -95,72 +95,90 @@ class sp2150:
         """Placeholder: the simulator does not emulate VISA commands."""
         pass
 
+    def _require_connection(self) -> None:
+        """Require the same connection state as the hardware driver."""
+        if not self._connected:
+            raise RuntimeError("Instrument is not connected")
+
     @property
     def scan_speed(self) -> float:
         """Get grating scan speed in nm/min."""
+        self._require_connection()
         return self._scan_speed
 
     @scan_speed.setter
     def scan_speed(self, speed: Number) -> None:
         """Set grating scan speed in nm/min."""
-        self._scan_speed = float(speed)
+        self._require_connection()
+        self._scan_speed = float(f"{float(speed):.1f}")
 
     def scan_to_wavelength(self, wavelength: Number) -> None:
         """Scan grating to wavelength in nm."""
-        self._wavelength = float(wavelength)
+        self.wavelength = wavelength
 
     @property
     def wavelength(self) -> float:
         """Get current grating wavelength position in nm."""
+        self._require_connection()
         return self._wavelength
 
     @wavelength.setter
     def wavelength(self, wavelength: Number) -> None:
         """Set grating position for wavelength in nm."""
-        self._wavelength = float(wavelength)
+        self._require_connection()
+        self._wavelength = float(f"{float(wavelength):.1f}")
 
     @property
     def grating(self) -> int:
         """Get grating number."""
+        self._require_connection()
         return self._grating
 
     @grating.setter
     def grating(self, grating: Integer) -> None:
         """Set grating number."""
+        self._require_connection()
         self._grating = int(grating)
 
     @property
     def turret(self) -> int:
         """Get turret number."""
+        self._require_connection()
         return self._turret
 
     @turret.setter
     def turret(self, turret: Integer) -> None:
         """Set turrent number."""
+        self._require_connection()
         self._turret = int(turret)
 
     @property
     def grating_info(self) -> str:
         """Get groove spacing and blaze wavelength of each grating."""
+        self._require_connection()
         return self._grating_info
 
     @property
     def turret_info(self) -> str:
         """Get groove spacing of each grating on each turret."""
+        self._require_connection()
         return self._turret_info
 
     @property
     def filter(self) -> int:
         """Get filter wheel position number."""
+        self._require_connection()
         return self._filter
 
     @filter.setter
     def filter(self, filter_pos: Integer) -> None:
         """Set filter wheel position number."""
+        self._require_connection()
         self._filter = int(filter_pos)
 
     def home_filter(self) -> None:
         """Set filter wheel to home position."""
+        self._require_connection()
         self._filter = 1
 
 
@@ -186,6 +204,7 @@ if __name__ == "__main__":
             "set_turret",
             "get_turret",
             "get_grating_info",
+            "get_turret_info",
             "set_filter",
             "get_filter",
             "home_filter",
@@ -199,11 +218,15 @@ if __name__ == "__main__":
             + "number, filter number"
         ),
     )
+    parser.add_argument(
+        "-t", "--timeout", type=int, default=30000,
+        help="Communications timeout in ms (accepted for API compatibility)",
+    )
     args = parser.parse_args()
 
     # run command in context manager to ensure proper cleanup
     with sp2150() as mono:
-        mono.connect(args.resource_name)
+        mono.connect(args.resource_name, timeout=args.timeout)
 
         # call function
         if args.function == "set_scan_speed":
@@ -226,8 +249,8 @@ if __name__ == "__main__":
             print(mono.turret)
         elif args.function == "get_grating_info":
             print(mono.grating_info)
-        # elif args.function == "get_turret_info":
-        #     print(mono.turret_info)
+        elif args.function == "get_turret_info":
+            print(mono.turret_info)
         elif args.function == "set_filter":
             mono.filter = args.parameter
         elif args.function == "get_filter":
