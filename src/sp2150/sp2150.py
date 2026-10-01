@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import warnings
 from types import TracebackType
 from typing import Any, Final
@@ -27,6 +28,22 @@ _FIXED_OPTIONS = frozenset({
     "data_bits", "parity", "stop_bits", "flow_control", "end_input", "end_output",
     "resource_pyclass",
 })
+
+
+def _finite_number(value: Number, name: str) -> float:
+    """Convert a numeric input, rejecting NaN and infinity."""
+    result = float(value)
+    if not math.isfinite(result):
+        raise ValueError(f"{name} must be finite")
+    return result
+
+
+def _scan_speed_value(speed: Number) -> float:
+    """Validate scan speed after rounding to device precision (nm/min)."""
+    result = float(f"{_finite_number(speed, 'Scan speed'):.1f}")
+    if result <= 0:
+        raise ValueError("Scan speed must be positive at the device's one-decimal precision")
+    return result
 
 
 def _discard_fixed_options(options: dict[str, Any]) -> None:
@@ -220,17 +237,34 @@ class sp2150:
 
     @scan_speed.setter
     def scan_speed(self, speed: Number) -> None:
-        """Set grating scan speed in nm/min."""
-        self._query(f"{float(speed):.1f} NM/MIN")
+        """Set grating scan speed in nm/min.
+
+        Raises
+        ------
+        ValueError
+            Speed is nonfinite or is not positive after rounding to one decimal.
+        """
+        self._query(f"{_scan_speed_value(speed):.1f} NM/MIN")
 
     def scan_to_wavelength(self, wavelength: Number) -> None:
-        """Scan grating to wavelength in nm."""
+        """Scan grating to wavelength in nm.
+
+        Raises
+        ------
+        ValueError
+            Target is nonfinite, or the reported scan speed is nonfinite or
+            nonpositive.
+        """
         instr = self._instr
         if instr is None:
             raise RuntimeError(_NOT_CONNECTED)
-        wavelength = float(wavelength)
+        wavelength = _finite_number(wavelength, "Wavelength")
         # calculate scan time in ms
-        scan_time = abs(wavelength - self.wavelength) * 60000 / self.scan_speed
+        current_wavelength = self.wavelength
+        speed = _finite_number(self.scan_speed, "Reported scan speed")
+        if speed <= 0:
+            raise ValueError("Reported scan speed must be positive")
+        scan_time = abs(wavelength - current_wavelength) * 60000 / speed
 
         # if necessary, temporarily increase timeout for a wavelength scan
         old_timeout = instr.timeout
@@ -252,8 +286,14 @@ class sp2150:
 
     @wavelength.setter
     def wavelength(self, wavelength: Number) -> None:
-        """Set grating position for wavelength in nm."""
-        self._query(f"{float(wavelength):.1f} GOTO")
+        """Set grating position for wavelength in nm.
+
+        Raises
+        ------
+        ValueError
+            Wavelength is nonfinite.
+        """
+        self._query(f"{_finite_number(wavelength, 'Wavelength'):.1f} GOTO")
 
     @property
     def grating(self) -> int:

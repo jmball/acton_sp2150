@@ -51,6 +51,8 @@ Tests use standard-library unittest:
 - `tests/test_hardware_runner.py`: tests the integration runner using fake resources.
 - `tests/test_cli.py`: example argument validation, dispatch, and cleanup with
   the simulator and fake hardware resources.
+- `tests/test_numeric_validation.py`: finite numeric inputs, positive rounded
+  scan speeds, state preservation, and invalid hardware scan-speed readback.
 
 Run the default suite without hardware:
 
@@ -114,6 +116,9 @@ Do not skip its failures merely because that command previously had firmware iss
   Scanning uses `NM`, direct positioning uses `GOTO`, and numeric wavelength
   and scan-speed commands use one decimal place. Review temporary timeout
   restoration and resource cleanup when changing error handling.
+  Both implementations reject nonfinite wavelength/scan-speed inputs and require
+  scan speed to remain positive after rounding. Scanning also validates hardware
+  scan-speed readback before calculating duration or changing the timeout.
 - Keep fixes scoped; avoid unrelated packaging modernization or version bumps.
 - Use the simulator or fake resources for routine validation. Real command-line
   operations connect to equipment and may move gratings or the filter wheel;

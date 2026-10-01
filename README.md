@@ -99,6 +99,12 @@ Wavelength and scan speed use the same one-decimal precision, and state persists
 across disconnect/reconnect. Simulation uses immediate in-memory state changes;
 it does not emulate movement time, hardware faults, or installed grating limits.
 
+Both implementations reject nonfinite wavelength and scan-speed inputs with
+`ValueError`. Scan speed must remain positive after rounding to one decimal place
+(for example, `0.01` nm/min is rejected because it rounds to zero). Invalid inputs
+do not send commands or change state. Before scanning, the hardware driver also
+requires a finite, positive scan speed read back from the instrument.
+
 The test suite has three complementary layers:
 
 - Simulator state tests and a shared API contract check experiment behavior,

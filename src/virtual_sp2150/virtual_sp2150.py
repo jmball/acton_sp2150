@@ -6,7 +6,10 @@ from types import TracebackType
 from typing import Any
 
 import pyvisa
-from sp2150.sp2150 import Integer, Number, _NOT_CONNECTED, _discard_fixed_options
+from sp2150.sp2150 import (
+    Integer, Number, _NOT_CONNECTED, _discard_fixed_options, _finite_number,
+    _scan_speed_value,
+)
 
 
 class sp2150:
@@ -82,12 +85,12 @@ class sp2150:
 
     @scan_speed.setter
     def scan_speed(self, speed: Number) -> None:
-        """Set grating scan speed in nm/min."""
+        """Set finite scan speed in nm/min, positive after one-decimal rounding."""
         self._check_connection()
-        self._scan_speed = float(f"{float(speed):.1f}")
+        self._scan_speed = _scan_speed_value(speed)
 
     def scan_to_wavelength(self, wavelength: Number) -> None:
-        """Scan grating to wavelength in nm."""
+        """Scan grating to a finite wavelength in nm."""
         self.wavelength = wavelength
 
     @property
@@ -98,9 +101,9 @@ class sp2150:
 
     @wavelength.setter
     def wavelength(self, wavelength: Number) -> None:
-        """Set grating position for wavelength in nm."""
+        """Set grating position to a finite wavelength in nm."""
         self._check_connection()
-        self._wavelength = float(f"{float(wavelength):.1f}")
+        self._wavelength = float(f"{_finite_number(wavelength, 'Wavelength'):.1f}")
 
     @property
     def grating(self) -> int:
