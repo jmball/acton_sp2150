@@ -2,6 +2,20 @@
 
 from pyvisa import constants
 from pyvisa.resources import MessageBasedResource, SerialInstrument
+from unittest.mock import Mock
+
+
+def make_manager(resource):
+    """Mock opening a resource and applying the supplied valid options."""
+    manager = Mock()
+
+    def open_resource(resource_name, access_mode=0, open_timeout=0, **options):
+        for name, value in options.items():
+            setattr(resource, name, value)
+        return resource
+
+    manager.open_resource.side_effect = open_resource
+    return manager
 
 
 class FakeResourceMixin:

@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import inspect
 import logging
 from types import TracebackType
 from typing import Any
 
 import pyvisa
-from pyvisa import attributes, constants
+from pyvisa import constants
 from pyvisa.resources import MessageBasedResource, Resource, SerialInstrument
 
 
@@ -21,34 +20,17 @@ _FIXED_OPTIONS = frozenset({
     "read_termination", "write_termination", "encoding", "baud_rate",
     "data_bits", "parity", "stop_bits", "flow_control", "end_input", "end_output",
 })
-_OPEN_OPTIONS = frozenset({"access_mode", "open_timeout"})
 
 
 def _validate_fixed_options(options: dict[str, Any]) -> None:
     """Reject overrides, including values equal to the device defaults."""
+    if "resource_pyclass" in options:
+        raise TypeError("resource_pyclass is managed by PyVISA and cannot be overridden")
     fixed = _FIXED_OPTIONS.intersection(options)
     if fixed:
         raise ValueError(
             "Device settings are managed by the driver and cannot be configured: "
             + ", ".join(sorted(fixed))
-        )
-
-
-def _validate_resource_options(
-    resource_type: type[MessageBasedResource], options: dict[str, Any]
-) -> None:
-    """Accept writable VISA attributes and supported message-buffer settings."""
-    _validate_fixed_options(options)
-    for name in options:
-        if name in _OPEN_OPTIONS or name in {"chunk_size", "query_delay"}:
-            continue
-        descriptor = inspect.getattr_static(resource_type, name, None)
-        if isinstance(descriptor, attributes.Attribute) and descriptor.write:
-            continue
-        if name == "timeout":
-            continue
-        raise TypeError(
-            f"{name!r} is not a supported writable option for {resource_type.__name__}"
         )
 
 
@@ -108,8 +90,8 @@ class sp2150:
             resource manager using the default VISA backend. Managers are shared
             by PyVISA: this driver retains the manager but never closes it.
         resource_kwargs : dict
-            Writable VISA attributes (e.g. timeout in ms, query_delay in seconds,
-            chunk_size) or open options (access_mode, open_timeout). Device
+            Options forwarded to PyVISA open_resource for validation and application
+            (e.g. timeout in ms, query_delay in seconds, access_mode). Device
             termination, ASCII encoding, and serial settings cannot be supplied.
 
         Raises
@@ -119,32 +101,24 @@ class sp2150:
         ValueError
             Attempt to configure a fixed device setting.
         TypeError
-            Unknown, read-only, or unsupported resource option or resource type.
+            Resource class override or a resource that is not message-based.
 
         Notes
         -----
         Serial resources are configured for 9600 baud, 8 data bits, no parity,
         one stop bit, and no flow control. The driver owns only the instrument
-        session. Initialization failures close it and leave this object disconnected.
+        session. Failures after open_resource returns close the session and leave
+        this object disconnected. Failures inside open_resource use PyVISA cleanup.
         """
         if self.instr is not None:
             raise RuntimeError("Already connected; disconnect before reconnecting")
         _validate_fixed_options(resource_kwargs)
         if resource_manager is None:
             resource_manager = pyvisa.ResourceManager()
-        # Apply attributes ourselves so failures cannot leak a resource inside
-        # open_resource before it has returned the session to us.
-        open_options = {
-            name: value for name, value in resource_kwargs.items() if name in _OPEN_OPTIONS
-        }
-        instr = resource_manager.open_resource(resource_name, **open_options)
+        instr = resource_manager.open_resource(resource_name, **resource_kwargs)
         try:
             if not isinstance(instr, MessageBasedResource):
                 raise TypeError("The instrument requires a message-based VISA resource")
-            _validate_resource_options(type(instr), resource_kwargs)
-            for name, value in resource_kwargs.items():
-                if name not in _OPEN_OPTIONS:
-                    setattr(instr, name, value)
             instr.encoding = "ASCII"
             instr.write_termination = self._write_termination
             instr.read_termination = self._read_termination

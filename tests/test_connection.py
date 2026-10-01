@@ -8,14 +8,13 @@ from pyvisa.resources import Resource
 
 from sp2150 import sp2150
 from virtual_sp2150 import sp2150 as virtual_sp2150
-from tests.fakes import FakeMessage, FakeSerial
+from tests.fakes import FakeMessage, FakeSerial, make_manager
 
 
 class ConnectionTests(unittest.TestCase):
     def setUp(self):
         self.resource = FakeSerial()
-        self.manager = Mock()
-        self.manager.open_resource.return_value = self.resource
+        self.manager = make_manager(self.resource)
         self.device = sp2150()
 
     def connect(self, **options):
@@ -65,35 +64,38 @@ class ConnectionTests(unittest.TestCase):
         self.manager.open_resource.assert_not_called()
         self.assertIsNone(self.device.instr)
 
-    def test_invalid_names_read_only_attributes_and_methods_are_rejected(self):
-        for name in ("timeuot", "bytes_in_buffer", "close", "session", "resource_pyclass", "_session"):
-            with self.subTest(name=name), self.assertRaisesRegex(TypeError, name):
-                self.connect(**{name: 1})
-        self.assertEqual(self.resource.close_count, 6)
-        self.assertEqual(self.resource.commands, [])
+    def test_pyvisa_option_errors_are_propagated_without_driver_cleanup(self):
+        error = ValueError("PyVISA rejected timeuot")
+        self.manager.open_resource.side_effect = error
+        with self.assertRaises(ValueError) as raised:
+            self.connect(timeuot=1000)
+        self.assertIs(raised.exception, error)
+        self.manager.open_resource.assert_called_once_with("serial-alias", timeuot=1000)
+        self.assertEqual(self.resource.close_count, 0)
         self.assertIsNone(self.device.instr)
+
+    def test_resource_class_override_cannot_bypass_fixed_serial_configuration(self):
+        with self.assertRaisesRegex(TypeError, "resource_pyclass"):
+            self.connect(resource_pyclass=FakeMessage)
+        self.manager.open_resource.assert_not_called()
 
     def test_writable_interface_specific_attribute_is_supported(self):
         self.connect(discard_null=True)
         self.assertTrue(self.resource.discard_null)
 
-    def test_interface_specific_attribute_is_rejected_for_other_interfaces(self):
-        self.manager.open_resource.return_value = resource = FakeMessage()
-        with self.assertRaisesRegex(TypeError, "discard_null"):
-            self.connect(discard_null=True)
-        self.assertEqual(resource.close_count, 1)
-
     def test_message_resource_does_not_receive_serial_settings(self):
-        self.manager.open_resource.return_value = resource = FakeMessage()
+        resource = FakeMessage()
+        self.manager = make_manager(resource)
         self.connect(send_end=False)
         self.assertFalse(resource.send_end)
         self.assertEqual(resource.commands, ["NO-ECHO"])
         self.assertNotIn(constants.VI_ATTR_ASRL_BAUD, resource.values)
 
-    def test_open_options_are_forwarded_without_resource_attributes(self):
+    def test_all_resource_options_are_forwarded_to_pyvisa(self):
         self.connect(access_mode=constants.AccessModes.exclusive_lock, open_timeout=2000, timeout=3000)
         self.manager.open_resource.assert_called_once_with(
-            "serial-alias", access_mode=constants.AccessModes.exclusive_lock, open_timeout=2000
+            "serial-alias", access_mode=constants.AccessModes.exclusive_lock,
+            open_timeout=2000, timeout=3000
         )
         self.assertEqual(self.resource.timeout, 3000)
 
@@ -141,11 +143,11 @@ class ConnectionTests(unittest.TestCase):
         self.assertIsNone(self.device._resource_manager)
         self.manager.close.assert_not_called()
 
-    def test_attribute_failure_closes_partial_connection(self):
+    def test_option_value_failure_inside_open_resource_leaves_driver_disconnected(self):
         self.resource.fail_attribute = constants.ResourceAttribute.timeout_value
         with self.assertRaisesRegex(ValueError, "attribute rejected"):
             self.connect(timeout=2000)
-        self.assertEqual(self.resource.close_count, 1)
+        self.assertEqual(self.resource.close_count, 0)
         self.assertIsNone(self.device.instr)
         self.assertIsNone(self.device._resource_manager)
         self.manager.close.assert_not_called()
@@ -191,6 +193,7 @@ class ConnectionTests(unittest.TestCase):
     def test_non_message_resource_is_closed_and_rejected(self):
         resource = Mock(spec=Resource)
         self.manager.open_resource.return_value = resource
+        self.manager.open_resource.side_effect = None
         with self.assertRaisesRegex(TypeError, "message-based"):
             self.connect()
         resource.close.assert_called_once()
@@ -213,8 +216,6 @@ class ConnectionTests(unittest.TestCase):
         with patch("pyvisa.ResourceManager") as factory:
             with self.assertRaises(ValueError):
                 device.connect("ASRL2::INSTR", baud_rate=9600)
-            with self.assertRaises(TypeError):
-                device.connect("ASRL2::INSTR", timeuot=2000)
             device.connect("ASRL2::INSTR", timeout=2000)
             with self.assertRaises(RuntimeError):
                 device.connect("ASRL2::INSTR")
@@ -227,12 +228,11 @@ class ConnectionTests(unittest.TestCase):
         self.assertEqual(device.wavelength, 532.0)
         self.assertEqual(device.grating, 2)
 
-    def test_simulator_accepts_gpib_specific_writable_options(self):
+    def test_simulator_ignores_backend_options_without_generic_validation(self):
         device = virtual_sp2150()
         device.connect("GPIB0::14::INSTR", enable_repeat_addressing=True)
         device.disconnect()
-        with self.assertRaises(TypeError):
-            device.connect("ASRL2::INSTR", enable_repeat_addressing=True)
+        device.connect("ASRL2::INSTR", enable_repeat_addressing=True, future_backend_option=1)
 
 
 if __name__ == "__main__":

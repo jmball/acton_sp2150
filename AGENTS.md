@@ -92,8 +92,11 @@ Do not skip its failures merely because that command previously had firmware iss
   leading space and unit. `_query_manual` reads one byte at a time to handle
   partial termination sequences.
 - The driver rejects overrides of termination, encoding, and fixed serial
-  settings; RS232 uses 9600 baud, 8N1, and no flow control. Keep interface option
-  validation and simulator validation consistent. The resource manager is
+  settings; RS232 uses 9600 baud, 8N1, and no flow control. Keep fixed-setting
+  validation consistent in both implementations. Delegate all other resource
+  options to PyVISA open_resource; the simulator accepts and ignores these
+  without attempting to duplicate backend validation. Resource class overrides
+  remain prohibited so they cannot bypass serial configuration. The resource manager is
   keyword-only and retained while connected, but never closed by the driver
   because PyVISA shares manager sessions. Disconnect explicitly before reconnecting.
 - Wavelengths are in nm, scan speed is in nm/min, and VISA timeouts are in ms.

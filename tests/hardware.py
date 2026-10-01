@@ -159,7 +159,7 @@ def parse_options(argv: Sequence[str] | None = None) -> tuple[HardwareOptions, l
         resource_options[key] = decoded
     try:
         _validate_fixed_options(resource_options)
-    except ValueError as exc:
+    except (ValueError, TypeError) as exc:
         parser.error(str(exc))
     options = HardwareOptions(
         resource_name=args.resource_name,

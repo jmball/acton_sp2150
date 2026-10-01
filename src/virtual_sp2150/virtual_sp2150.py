@@ -6,10 +6,7 @@ from types import TracebackType
 from typing import Any
 
 import pyvisa
-from pyvisa import resources, rname
-from pyvisa.resources import MessageBasedResource, SerialInstrument
-
-from sp2150.sp2150 import Integer, Number, _validate_resource_options
+from sp2150.sp2150 import Integer, Number, _validate_fixed_options
 
 
 class sp2150:
@@ -61,30 +58,13 @@ class sp2150:
         resource_manager : pyvisa.ResourceManager, optional
             Accepted for API compatibility. Never used or closed by the simulator.
         resource_kwargs : dict
-            Validated against the resource type but not applied to any hardware.
-            Fixed device settings cannot be supplied. Aliases are treated as
-            generic message-based resources without contacting a VISA backend.
+            Accepted and ignored without contacting a VISA backend. Fixed device
+            settings and resource class overrides are rejected like the driver;
+            other options are not validated by the simulator.
         """
         if self._connected:
             raise RuntimeError("Already connected; disconnect before reconnecting")
-        resource_type: type[MessageBasedResource] = MessageBasedResource
-        try:
-            resource_name_info = rname.ResourceName.from_string(resource_name)
-            resource_types: dict[tuple[str, str], type[MessageBasedResource]] = {
-                ("ASRL", "INSTR"): SerialInstrument,
-                ("GPIB", "INSTR"): resources.GPIBInstrument,
-                ("USB", "INSTR"): resources.USBInstrument,
-                ("USB", "RAW"): resources.USBRaw,
-                ("TCPIP", "INSTR"): resources.TCPIPInstrument,
-                ("TCPIP", "SOCKET"): resources.TCPIPSocket,
-            }
-            resource_type = resource_types.get(
-                (resource_name_info.interface_type, resource_name_info.resource_class),
-                MessageBasedResource,
-            )
-        except rname.InvalidResourceName:
-            pass
-        _validate_resource_options(resource_type, resource_kwargs)
+        _validate_fixed_options(resource_kwargs)
         self._connected = True
 
     def disconnect(self) -> None:

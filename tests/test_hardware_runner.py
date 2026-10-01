@@ -6,7 +6,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 from tests import hardware
-from tests.fakes import FakeSerial
+from tests.fakes import FakeSerial, make_manager
 
 
 class HardwareRunnerTests(unittest.TestCase):
@@ -21,11 +21,10 @@ class HardwareRunnerTests(unittest.TestCase):
 
     def manager_factory(self, backend):
         self.assertEqual(backend, "@py")
-        manager = Mock()
         resource = FakeSerial()
+        manager = make_manager(resource)
         self.resources.append(resource)
         self.managers.append(manager)
-        manager.open_resource.return_value = resource
         return manager
 
     def assert_restored_and_closed(self):
@@ -123,7 +122,9 @@ class HardwareRunnerTests(unittest.TestCase):
         self.assertEqual(result, 0, output.getvalue())
         self.assertEqual(self.resources[0].timeout, 45000)
         self.assertEqual(self.resources[0].query_delay, 0.05)
-        self.managers[0].open_resource.assert_called_once_with("ASRL2::INSTR", open_timeout=2000)
+        self.managers[0].open_resource.assert_called_once_with(
+            "ASRL2::INSTR", open_timeout=2000, timeout=45000, query_delay=0.05
+        )
 
     def test_invalid_cli_options_never_create_a_manager(self):
         for extra in (

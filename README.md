@@ -54,13 +54,14 @@ The driver manages ASCII encoding, write termination `\r`, and read termination
 one stop bit, and no flow control. The framing requirements are documented in
 the [SP-2150i operating instructions, section IV-B](https://www.princetoninstruments.com/wp-content/uploads/2020/04/SP-2150i.pdf).
 Passing any of these fixed settings, including matching values, raises
-`ValueError`. Unknown, read-only, or unsupported resource options raise
-`TypeError`; valid writable VISA settings remain configurable. `access_mode`
-and `open_timeout` are forwarded when opening the resource. `resource_pyclass`
+`ValueError`. Other resource options are passed directly to PyVISA's
+`open_resource()` for validation and application; accepted options and errors
+follow PyVISA and the selected backend. `resource_pyclass`
 overrides are not supported: PyVISA selects the interface from the resource name.
 
-Initialization failures close the partially configured session and leave the
-driver disconnected. Calling `connect()` while connected raises `RuntimeError`;
+Failures during driver initialization after PyVISA returns a resource close that
+session and leave the driver disconnected. Failures within `open_resource()` use
+PyVISA's own cleanup. Calling `connect()` while connected raises `RuntimeError`;
 call `disconnect()` first to reconnect. Disconnecting repeatedly is safe and
 clears connection state even if closing fails. The driver retains its resource
 manager while connected but closes only its instrument session, since PyVISA
@@ -68,8 +69,10 @@ shares managers between callers. Supplied managers remain caller-owned; default
 managers follow PyVISA's shared lifetime. Context cleanup preserves an exception
 already raised by the body and logs any additional close failure.
 
-The simulator accepts the same keyword-only manager and validates resource
-options without opening hardware. It supports the same explicit reconnect
+The simulator accepts the same keyword-only manager and rejects fixed device
+overrides without opening hardware. Other backend options are accepted and
+ignored; the simulator does not reproduce PyVISA option validation errors.
+It supports the same explicit reconnect
 behavior and converts numeric setters to the hardware driver's numeric types;
 operations require `connect()` just as they do with the hardware driver.
 Wavelength and scan speed use the same one-decimal precision, and state persists
