@@ -53,6 +53,8 @@ Tests use standard-library unittest:
   the simulator and fake hardware resources.
 - `tests/test_numeric_validation.py`: finite numeric inputs, positive rounded
   scan speeds, state preservation, and invalid hardware scan-speed readback.
+- `tests/test_timeouts.py`: configurable operation allowances, scan buffers,
+  preservation of longer/infinite timeouts, and restoration failures.
 
 Run the default suite without hardware:
 
@@ -119,6 +121,11 @@ Do not skip its failures merely because that command previously had firmware iss
   Both implementations reject nonfinite wavelength/scan-speed inputs and require
   scan speed to remain positive after rounding. Scanning also validates hardware
   scan-speed readback before calculating duration or changing the timeout.
+  Operation allowances are configurable in ms: grating_timeout_ms (30000),
+  filter_timeout_ms (10000), filter_home_timeout_ms (20000), and
+  scan_timeout_buffer_ms (5000). Both implementations expose these attributes.
+  Extend rather than shorten caller timeouts; restore after operations. Preserve
+  an active command exception if restoration also fails, logging that failure.
 - Keep fixes scoped; avoid unrelated packaging modernization or version bumps.
 - Use the simulator or fake resources for routine validation. Real command-line
   operations connect to equipment and may move gratings or the filter wheel;

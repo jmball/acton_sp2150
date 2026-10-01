@@ -7,16 +7,17 @@ from typing import Any
 
 import pyvisa
 from sp2150.sp2150 import (
-    Integer, Number, _NOT_CONNECTED, _discard_fixed_options, _finite_number,
+    Integer, Number, _NOT_CONNECTED, _OperationTimeouts, _discard_fixed_options, _finite_number,
     _scan_speed_value,
 )
 
 
-class sp2150:
+class sp2150(_OperationTimeouts):
     """Monochromator instrument object."""
 
     def __init__(self) -> None:
         """Initialise with dummy parameters."""
+        super().__init__()
         self._scan_speed = 1000.0
         self._wavelength = 0.0
         self._grating = 1

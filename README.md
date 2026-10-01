@@ -105,6 +105,32 @@ Both implementations reject nonfinite wavelength and scan-speed inputs with
 do not send commands or change state. Before scanning, the hardware driver also
 requires a finite, positive scan speed read back from the instrument.
 
+Operation timeout allowances are configurable attributes in milliseconds:
+
+| Attribute | Default | Operation |
+| --- | ---: | --- |
+| `grating_timeout_ms` | 30000 | Grating selection |
+| `filter_timeout_ms` | 10000 | Filter selection |
+| `filter_home_timeout_ms` | 20000 | Filter homing |
+| `scan_timeout_buffer_ms` | 5000 | Added to calculated wavelength scan duration |
+
+Grating indexing takes approximately 20 seconds according to the
+[SP-2150i manual](https://www.princetoninstruments.com/wp-content/uploads/2020/04/SP-2150i.pdf).
+The [FA-2448 manual](https://cfd.rit.edu/products/manuals/Princeton%20Acton/FA-2448.pdf)
+specifies 2.5 seconds per adjacent filter position, with selection taking the
+shortest route. The defaults include additional allowance. Filter homing has no
+documented duration; its default conservatively allows a full revolution plus
+margin and should be checked against your hardware.
+
+For example, set `mono.grating_timeout_ms = 40000` or
+`mono.scan_timeout_buffer_ms = 10000` before running an operation. A scan's
+timeout is calculated from the current wavelength and scan speed plus the buffer.
+These operations temporarily extend the resource timeout when needed and restore
+the previous setting afterward, including when a command fails. A longer or
+infinite caller timeout is preserved. Allowances must be finite and nonnegative;
+zero disables the fixed-operation extension or removes the scan buffer.
+The simulator exposes the same attributes, with immediate simulated operations.
+
 The test suite has three complementary layers:
 
 - Simulator state tests and a shared API contract check experiment behavior,

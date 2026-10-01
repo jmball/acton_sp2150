@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 import logging
 import math
 import warnings
@@ -59,11 +61,25 @@ def _discard_fixed_options(options: dict[str, Any]) -> None:
         )
 
 
-class sp2150:
+class _OperationTimeouts:
+    """Configurable operation allowances in ms, shared with the simulator."""
+
+    def __init__(self) -> None:
+        # GRATING takes about 20 s; allow additional time for communication.
+        self.grating_timeout_ms: float = 30000.0
+        # FILTER takes 2.5 s per adjacent position (up to three steps).
+        self.filter_timeout_ms: float = 10000.0
+        # FHOME has no documented duration; allow a full revolution plus margin.
+        self.filter_home_timeout_ms: float = 20000.0
+        self.scan_timeout_buffer_ms: float = 5000.0
+
+
+class sp2150(_OperationTimeouts):
     """Monochromator instrument object."""
 
     def __init__(self) -> None:
         """Construct object."""
+        super().__init__()
         self._instr: MessageBasedResource | None = None
 
     def __enter__(self) -> sp2150:
@@ -183,6 +199,31 @@ class sp2150:
             raise RuntimeError(_NOT_CONNECTED)
         return self._instr.read_bytes(count)
 
+    @contextmanager
+    def _extended_timeout(self, minimum_ms: float) -> Iterator[None]:
+        """Temporarily extend the VISA timeout, preserving a longer caller timeout."""
+        instr = self._instr
+        if instr is None:
+            raise RuntimeError(_NOT_CONNECTED)
+        minimum_ms = _finite_number(minimum_ms, "Operation timeout")
+        if minimum_ms < 0:
+            raise ValueError("Operation timeout must be nonnegative")
+        old_timeout = instr.timeout
+        if minimum_ms <= old_timeout:
+            yield
+            return
+        instr.timeout = minimum_ms
+        try:
+            yield
+        except BaseException:
+            try:
+                instr.timeout = old_timeout
+            except Exception:
+                _LOGGER.warning("Failed to restore the instrument timeout after an error", exc_info=True)
+            raise
+        else:
+            instr.timeout = old_timeout
+
     def _query_value(self, cmd: str) -> str:
         """Query a command, stripping space at beginning of the response and the unit.
 
@@ -258,7 +299,10 @@ class sp2150:
         instr = self._instr
         if instr is None:
             raise RuntimeError(_NOT_CONNECTED)
-        wavelength = _finite_number(wavelength, "Wavelength")
+        wavelength = float(f"{_finite_number(wavelength, 'Wavelength'):.1f}")
+        buffer_ms = _finite_number(self.scan_timeout_buffer_ms, "Scan timeout buffer")
+        if buffer_ms < 0:
+            raise ValueError("Scan timeout buffer must be nonnegative")
         # calculate scan time in ms
         current_wavelength = self.wavelength
         speed = _finite_number(self.scan_speed, "Reported scan speed")
@@ -266,18 +310,8 @@ class sp2150:
             raise ValueError("Reported scan speed must be positive")
         scan_time = abs(wavelength - current_wavelength) * 60000 / speed
 
-        # if necessary, temporarily increase timeout for a wavelength scan
-        old_timeout = instr.timeout
-        if long_scan := scan_time > old_timeout:
-            # add a few seconds buffer to scan timeout
-            instr.timeout = scan_time + 5000
-
-        # run the scan
-        try:
+        with self._extended_timeout(scan_time + buffer_ms):
             self._query(f"{wavelength:.1f} NM")
-        finally:
-            if long_scan:
-                instr.timeout = old_timeout
 
     @property
     def wavelength(self) -> float:
@@ -302,8 +336,10 @@ class sp2150:
 
     @grating.setter
     def grating(self, grating: Integer) -> None:
-        """Set grating number."""
-        self._query(f"{int(grating)} GRATING")
+        """Set grating number, allowing grating_timeout_ms for indexing."""
+        command = f"{int(grating)} GRATING"
+        with self._extended_timeout(self.grating_timeout_ms):
+            self._query(command)
 
     @property
     def turret(self) -> int:
@@ -332,9 +368,12 @@ class sp2150:
 
     @filter.setter
     def filter(self, filter_pos: Integer) -> None:
-        """Set filter wheel position number."""
-        self._query(f"{int(filter_pos)} FILTER")
+        """Set filter wheel position, allowing filter_timeout_ms for movement."""
+        command = f"{int(filter_pos)} FILTER"
+        with self._extended_timeout(self.filter_timeout_ms):
+            self._query(command)
 
     def home_filter(self) -> None:
-        """Set filter wheel to home position."""
-        self._query("FHOME")
+        """Home the filter wheel, allowing filter_home_timeout_ms for movement."""
+        with self._extended_timeout(self.filter_home_timeout_ms):
+            self._query("FHOME")
