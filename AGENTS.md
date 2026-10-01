@@ -5,9 +5,11 @@
 This repository controls a Princeton Instruments Acton SP-2150 monochromator
 and FA-2448 filter wheel.
 
-- `src/sp2150/sp2150.py`: PyVISA hardware driver and argparse command-line example.
-- `src/virtual_sp2150/virtual_sp2150.py`: in-memory simulator with a similar API
-  and its own command-line example; it does not emulate VISA communication.
+- `src/sp2150/sp2150.py`: PyVISA hardware driver.
+- `src/virtual_sp2150/virtual_sp2150.py`: in-memory simulator with the same public
+  API; it does not emulate VISA communication.
+- `examples/cli.py`: argparse command-line example for hardware and simulation
+  (`--virtual`). Validate arguments before creating a resource manager or driver.
 - Both packages export a lowercase `sp2150` class through `__init__.py` and
   obtain `__version__` using `importlib.metadata` and the distribution name
   `acton_sp2150`, falling back to `0.0.0` when it is not installed.
@@ -16,7 +18,7 @@ and FA-2448 filter wheel.
   The distribution name is `acton_sp2150`; import names are
   `sp2150` and `virtual_sp2150`.
 - `uv.lock`: committed dependency resolution for reproducible development.
-- `MANIFEST.in`: includes the complete test tree in source archives. Installation
+- `MANIFEST.in`: includes the tests and examples in source archives. Installation
   metadata and build configuration remain in `pyproject.toml`.
 - `LICENSE`: MIT license; keep package metadata consistent with this file.
 
@@ -47,6 +49,8 @@ Tests use standard-library unittest:
 - `tests/hardware.py`: explicitly invoked integration runner against real hardware.
   It is outside the discovery pattern and must never connect during default tests.
 - `tests/test_hardware_runner.py`: tests the integration runner using fake resources.
+- `tests/test_cli.py`: example argument validation, dispatch, and cleanup with
+  the simulator and fake hardware resources.
 
 Run the default suite without hardware:
 
@@ -59,9 +63,8 @@ validation appropriate to the change. Basic checks that do not contact hardware 
 
 ```sh
 uv run python -m compileall -q src
-uv run python src/virtual_sp2150/virtual_sp2150.py get_wavelength
-uv run python src/virtual_sp2150/virtual_sp2150.py --help
-uv run python src/sp2150/sp2150.py --help
+uv run python examples/cli.py --virtual get_wavelength
+uv run python examples/cli.py --help
 git diff --check
 ```
 
@@ -82,8 +85,8 @@ Do not skip its failures merely because that command previously had firmware iss
   parameter/return docstrings. Document units explicitly.
 - Preserve public imports, method signatures, and context-manager behavior
   unless the requested change requires an API change.
-- For shared API changes, review the hardware driver, simulator, and both CLI
-  dispatch blocks. Both implementations expose `turret_info`; `?TURRETS` has
+- For shared API changes, review the hardware driver, simulator, and example CLI
+  dispatch. Both implementations expose `turret_info`; `?TURRETS` has
   historically had hardware issues, which the integration suite should expose.
   The simulator must match public signatures, connection-state errors, and numeric
   conversions/precision. Keep the shared contract current when the API changes.

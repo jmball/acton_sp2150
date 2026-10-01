@@ -12,7 +12,7 @@ This creates `.venv` and installs the project in editable mode with the
 dependencies pinned in `uv.lock`. Run commands through uv:
 
 ```sh
-uv run python src/virtual_sp2150/virtual_sp2150.py get_wavelength
+uv run python examples/cli.py --virtual get_wavelength
 ```
 
 After changing dependencies in `pyproject.toml`, run `uv lock` and commit the
@@ -27,6 +27,21 @@ uv pip install --python /path/to/venv/bin/python .
 The distribution includes the `sp2150` hardware driver and the
 `virtual_sp2150` simulator. Hardware access requires a working VISA backend;
 the simulator can be used without connecting to an instrument.
+
+The command-line example uses hardware by default and requires a resource name:
+
+```sh
+uv run python examples/cli.py --resource-name 'ASRL2::INSTR' --visa-backend '@py' get_wavelength
+uv run python examples/cli.py --virtual goto_wavelength --parameter 532
+uv run python examples/cli.py --help
+```
+
+Commands that set values or scan require `--parameter`; getters and `home_filter`
+do not accept it. Wavelengths are in nm, scan speed in nm/min, and timeouts in ms.
+Each invocation connects, runs one command, and disconnects. A new simulator
+starts with wavelength 0 on each invocation. Hardware invocations may move the
+instrument. Serial access with `@py` requires pyserial, for example via
+`uv run --with pyserial python examples/cli.py ...`.
 
 To build a source distribution and wheel:
 
