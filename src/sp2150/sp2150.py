@@ -19,6 +19,7 @@ Integer = int | str
 ENCODING: Final[str] = "ASCII"
 WRITE_TERMINATION: Final[str] = "\r"
 READ_TERMINATION: Final[str] = " ok\r\n"
+_NOT_CONNECTED: Final[str] = "Instrument is not connected"
 
 # Protocol and serial framing belong to the device, not to callers.
 _FIXED_OPTIONS = frozenset({
@@ -150,19 +151,19 @@ class sp2150:
     def _write(self, cmd: str) -> None:
         """Send a command, requiring an active connection."""
         if self._instr is None:
-            raise RuntimeError("Instrument is not connected")
+            raise RuntimeError(_NOT_CONNECTED)
         self._instr.write(cmd)
 
     def _query(self, cmd: str) -> str:
         """Send a command and return the unparsed PyVISA response."""
         if self._instr is None:
-            raise RuntimeError("Instrument is not connected")
+            raise RuntimeError(_NOT_CONNECTED)
         return self._instr.query(cmd)
 
     def _read_bytes(self, count: int) -> bytes:
         """Read bytes, requiring an active connection."""
         if self._instr is None:
-            raise RuntimeError("Instrument is not connected")
+            raise RuntimeError(_NOT_CONNECTED)
         return self._instr.read_bytes(count)
 
     def _query_value(self, cmd: str) -> str:
@@ -226,7 +227,7 @@ class sp2150:
         """Scan grating to wavelength in nm."""
         instr = self._instr
         if instr is None:
-            raise RuntimeError("Instrument is not connected")
+            raise RuntimeError(_NOT_CONNECTED)
         wavelength = float(wavelength)
         # calculate scan time in ms
         scan_time = abs(wavelength - self.wavelength) * 60000 / self.scan_speed

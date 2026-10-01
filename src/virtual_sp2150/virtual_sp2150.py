@@ -6,7 +6,7 @@ from types import TracebackType
 from typing import Any
 
 import pyvisa
-from sp2150.sp2150 import Integer, Number, _discard_fixed_options
+from sp2150.sp2150 import Integer, Number, _NOT_CONNECTED, _discard_fixed_options
 
 
 class sp2150:
@@ -72,7 +72,7 @@ class sp2150:
     def _check_connection(self) -> None:
         """Require the same connection state as the hardware driver."""
         if not self._connected:
-            raise RuntimeError("Instrument is not connected")
+            raise RuntimeError(_NOT_CONNECTED)
 
     @property
     def scan_speed(self) -> float:
