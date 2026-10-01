@@ -1,26 +1,100 @@
 """Acton SP2150 monochromator control library."""
 
+from __future__ import annotations
+
+import inspect
+import logging
+from types import TracebackType
+from typing import Any
+
 import pyvisa
+from pyvisa import attributes, constants
+from pyvisa.resources import MessageBasedResource, Resource, SerialInstrument
+
+
+_LOGGER = logging.getLogger(__name__)
+Number = float | str
+Integer = int | str
+
+# Protocol and serial framing belong to the device, not to callers.
+_FIXED_OPTIONS = frozenset({
+    "read_termination", "write_termination", "encoding", "baud_rate",
+    "data_bits", "parity", "stop_bits", "flow_control", "end_input", "end_output",
+})
+_OPEN_OPTIONS = frozenset({"access_mode", "open_timeout"})
+
+
+def _validate_fixed_options(options: dict[str, Any]) -> None:
+    """Reject overrides, including values equal to the device defaults."""
+    fixed = _FIXED_OPTIONS.intersection(options)
+    if fixed:
+        raise ValueError(
+            "Device settings are managed by the driver and cannot be configured: "
+            + ", ".join(sorted(fixed))
+        )
+
+
+def _validate_resource_options(
+    resource_type: type[MessageBasedResource], options: dict[str, Any]
+) -> None:
+    """Accept writable VISA attributes and supported message-buffer settings."""
+    _validate_fixed_options(options)
+    for name in options:
+        if name in _OPEN_OPTIONS or name in {"chunk_size", "query_delay"}:
+            continue
+        descriptor = inspect.getattr_static(resource_type, name, None)
+        if isinstance(descriptor, attributes.Attribute) and descriptor.write:
+            continue
+        if name == "timeout":
+            continue
+        raise TypeError(
+            f"{name!r} is not a supported writable option for {resource_type.__name__}"
+        )
+
+
+def _close_after_failure(instr: Resource) -> None:
+    """Preserve the original failure even if closing the session also fails."""
+    try:
+        instr.close()
+    except Exception:
+        _LOGGER.warning("Failed to close the instrument after an error", exc_info=True)
 
 
 class sp2150:
     """Monochromator instrument object."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Construct object."""
         self._write_termination = "\r"
         self._read_termination = " ok\r\n"
-        self.instr = None
+        self.instr: MessageBasedResource | None = None
+        self._resource_manager: pyvisa.ResourceManager | None = None
 
-    def __enter__(self):
+    def __enter__(self) -> sp2150:
         """Enter the runtime context related to this object."""
         return self
 
-    def __exit__(self, exc_type, exc_value, traceback):
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
         """Exit the runtime context related to this object."""
-        self.disconnect()
+        try:
+            self.disconnect()
+        except Exception:
+            if exc_type is None:
+                raise
+            _LOGGER.warning("Failed to disconnect during exception cleanup", exc_info=True)
 
-    def connect(self, resource_name, resource_manager=None, **resource_kwargs):
+    def connect(
+        self,
+        resource_name: str,
+        *,
+        resource_manager: pyvisa.ResourceManager | None = None,
+        **resource_kwargs: Any,
+    ) -> None:
         """Connect to the instrument.
 
         Parameters
@@ -31,27 +105,85 @@ class sp2150:
             info on correct formatting for resource names.
         resource_manager : pyvisa.ResourceManager, optional
             Resource manager used to create new connection. If `None`, create a new
-            resource manager using system set VISA backend.
+            resource manager using the default VISA backend. Managers are shared
+            by PyVISA: this driver retains the manager but never closes it.
         resource_kwargs : dict
-            Keyword arguments passed to PyVISA resource to be used to change
-            instrument attributes after construction.
+            Writable VISA attributes (e.g. timeout in ms, query_delay in seconds,
+            chunk_size) or open options (access_mode, open_timeout). Device
+            termination, ASCII encoding, and serial settings cannot be supplied.
+
+        Raises
+        ------
+        RuntimeError
+            Already connected. Disconnect explicitly before reconnecting.
+        ValueError
+            Attempt to configure a fixed device setting.
+        TypeError
+            Unknown, read-only, or unsupported resource option or resource type.
+
+        Notes
+        -----
+        Serial resources are configured for 9600 baud, 8 data bits, no parity,
+        one stop bit, and no flow control. The driver owns only the instrument
+        session. Initialization failures close it and leave this object disconnected.
         """
+        if self.instr is not None:
+            raise RuntimeError("Already connected; disconnect before reconnecting")
+        _validate_fixed_options(resource_kwargs)
         if resource_manager is None:
             resource_manager = pyvisa.ResourceManager()
-        self.instr = resource_manager.open_resource(resource_name, **resource_kwargs)
+        # Apply attributes ourselves so failures cannot leak a resource inside
+        # open_resource before it has returned the session to us.
+        open_options = {
+            name: value for name, value in resource_kwargs.items() if name in _OPEN_OPTIONS
+        }
+        instr = resource_manager.open_resource(resource_name, **open_options)
+        try:
+            if not isinstance(instr, MessageBasedResource):
+                raise TypeError("The instrument requires a message-based VISA resource")
+            _validate_resource_options(type(instr), resource_kwargs)
+            for name, value in resource_kwargs.items():
+                if name not in _OPEN_OPTIONS:
+                    setattr(instr, name, value)
+            instr.encoding = "ASCII"
+            instr.write_termination = self._write_termination
+            instr.read_termination = self._read_termination
+            if isinstance(instr, SerialInstrument):
+                instr.baud_rate = 9600
+                instr.data_bits = 8
+                instr.parity = constants.Parity.none
+                instr.stop_bits = constants.StopBits.one
+                instr.flow_control = constants.ControlFlow.none
+                instr.end_input = constants.SerialTermination.termination_char
+                instr.end_output = constants.SerialTermination.none
+            instr.query("NO-ECHO")
+        except BaseException:
+            _close_after_failure(instr)
+            raise
+        self.instr = instr
+        self._resource_manager = resource_manager
 
-        # set instrument termchars
-        self.instr.write_termination = self._write_termination
-        self.instr.read_termination = self._read_termination
+    def disconnect(self) -> None:
+        """Close this instrument session; repeated calls are harmless.
 
-        # disable echo
-        self.instr.query("NO-ECHO")
+        The manager remains open because PyVISA may share it with other callers.
+        State is cleared even if closing the instrument raises an exception.
+        """
+        instr = self.instr
+        self.instr = None
+        try:
+            if instr is not None:
+                instr.close()
+        finally:
+            self._resource_manager = None
 
-    def disconnect(self):
-        """Disconnect instrument."""
-        self.instr.close()
+    def _require_connection(self) -> MessageBasedResource:
+        """Return the live resource or raise a clear connection-state error."""
+        if self.instr is None:
+            raise RuntimeError("Instrument is not connected")
+        return self.instr
 
-    def _query(self, cmd):
+    def _query(self, cmd: str) -> str:
         """Query a command, stripping space at beginning of the response and the unit.
 
         When echo is disabled, the first character returned is a superfluous space,
@@ -71,9 +203,9 @@ class sp2150:
         resp : str
             Response to command with receding space and unit stripped.
         """
-        return self.instr.query(cmd)[1:].split(" ")[0]
+        return self._require_connection().query(cmd)[1:].split(" ")[0]
 
-    def _query_manual(self, cmd):
+    def _query_manual(self, cmd: str) -> str:
         """Query a command manually looking for the termination character.
 
         Some commands return partial termination characters, which pyvisa doesn't
@@ -91,72 +223,75 @@ class sp2150:
             Response to command with receding space and unit stripped.
         """
         resp = b""
-        self.instr.write(cmd)
+        instr = self._require_connection()
+        instr.write(cmd)
         while resp.endswith(self._read_termination.encode("ASCII")) is False:
-            resp += self.instr.read_bytes(1)
+            resp += instr.read_bytes(1)
 
         return resp.decode("ASCII").strip(self._read_termination)
 
     @property
-    def scan_speed(self):
+    def scan_speed(self) -> float:
         """Get grating scan speed in nm/min."""
         return float(self._query("?NM/MIN"))
 
     @scan_speed.setter
-    def scan_speed(self, speed):
+    def scan_speed(self, speed: Number) -> None:
         """Set grating scan speed in nm/min."""
-        self.instr.query(f"{float(speed):.1f} NM/MIN")
+        self._require_connection().query(f"{float(speed):.1f} NM/MIN")
 
-    def scan_to_wavelength(self, wavelength):
+    def scan_to_wavelength(self, wavelength: Number) -> None:
         """Scan grating to wavelength in nm."""
+        instr = self._require_connection()
+        wavelength = float(wavelength)
         # calculate scan time in ms
         scan_time = abs(wavelength - self.wavelength) * 60000 / self.scan_speed
 
         # if necessary, temporarily increase timeout for a wavelength scan
-        old_timeout = self.instr.timeout
+        old_timeout = instr.timeout
         if long_scan := scan_time > old_timeout:
             # add a few seconds buffer to scan timeout
-            self.instr.timeout = scan_time + 5000
+            instr.timeout = scan_time + 5000
 
         # run the scan
-        self.instr.query(f"{float(wavelength):.1f} NM")
-
-        # reset timeout if needed
-        if long_scan:
-            self.instr.timeout = old_timeout
+        try:
+            instr.query(f"{wavelength:.1f} NM")
+        finally:
+            if long_scan:
+                instr.timeout = old_timeout
 
     @property
-    def wavelength(self):
+    def wavelength(self) -> float:
         """Get current grating wavelength position in nm."""
         return float(self._query("?NM"))
 
     @wavelength.setter
-    def wavelength(self, wavelength):
+    def wavelength(self, wavelength: Number) -> None:
         """Set grating position for wavelength in nm."""
-        self.instr.query(f"{float(wavelength):.1f} GOTO")
+        self._require_connection().query(f"{float(wavelength):.1f} GOTO")
 
     @property
-    def grating(self):
+    def grating(self) -> int:
         """Get grating number."""
         return int(self._query("?GRATING"))
 
     @grating.setter
-    def grating(self, grating):
+    def grating(self, grating: Integer) -> None:
         """Set grating number."""
-        self.instr.query(f"{int(grating)} GRATING")
+        self._require_connection().query(f"{int(grating)} GRATING")
 
     @property
-    def turret(self):
+    def turret(self) -> int:
         """Get turret number."""
         return int(self._query("?TURRET"))
 
     @turret.setter
-    def turret(self, turret):
+    def turret(self, turret: Integer) -> None:
         """Set turrent number."""
-        self.instr.query(f"{int(turret)} TURRET")
+        self._require_connection().query(f"{int(turret)} TURRET")
 
     @property
-    def grating_info(self):
+    def grating_info(self) -> str:
         """Get groove spacing and blaze wavelength of each grating."""
         return self._query_manual("?GRATINGS")
 
@@ -167,18 +302,18 @@ class sp2150:
     #     return self._query_manual("?TURRETS")
 
     @property
-    def filter(self):
+    def filter(self) -> int:
         """Get filter wheel position number."""
         return int(self._query("?FILTER"))
 
     @filter.setter
-    def filter(self, filter_pos):
+    def filter(self, filter_pos: Integer) -> None:
         """Set filter wheel position number."""
-        self.instr.query(f"{int(filter_pos)} FILTER")
+        self._require_connection().query(f"{int(filter_pos)} FILTER")
 
-    def home_filter(self):
+    def home_filter(self) -> None:
         """Set filter wheel to home position."""
-        self.instr.query("FHOME")
+        self._require_connection().query("FHOME")
 
 
 if __name__ == "__main__":

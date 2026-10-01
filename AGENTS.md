@@ -35,9 +35,16 @@ dependency changes, and `uv lock` after editing dependency declarations by hand.
 Commit `uv.lock` updates alongside the corresponding `pyproject.toml` changes.
 Use setuptools as the build backend; do not introduce Hatchling.
 
-There is no committed test suite, CI configuration, or configured formatter or
-linter. Choose validation appropriate to the change; do not claim a full test
-suite passed. Basic checks that do not contact hardware are:
+`tests/test_connection.py` contains standard-library unittest regressions using
+fake VISA resources, including connection validation, ownership, initialization
+failures, and cleanup. Run them without hardware:
+
+```sh
+uv run python -m unittest discover -s tests -v
+```
+
+There is no CI configuration or configured formatter or linter. Choose
+validation appropriate to the change. Basic checks that do not contact hardware are:
 
 ```sh
 uv run python -m compileall -q src
@@ -60,13 +67,17 @@ For packaging checks, run `uv build`; build outputs are ignored by Git.
 - Preserve public imports, method signatures, and context-manager behavior
   unless the requested change requires an API change.
 - For shared API changes, review the hardware driver, simulator, and both CLI
-  dispatch blocks. The simulator currently accepts values without the hardware
-  driver's numeric coercion and implements `turret_info`, which is disabled in
+  dispatch blocks. The simulator implements `turret_info`, which is disabled in
   the hardware driver because `?TURRETS` was not recognized.
 - Preserve protocol details intentionally: writes terminate with `\r`, reads
   with ` ok\r\n`, connection setup sends `NO-ECHO`, and `_query` removes the
   leading space and unit. `_query_manual` reads one byte at a time to handle
   partial termination sequences.
+- The driver rejects overrides of termination, encoding, and fixed serial
+  settings; RS232 uses 9600 baud, 8N1, and no flow control. Keep interface option
+  validation and simulator validation consistent. The resource manager is
+  keyword-only and retained while connected, but never closed by the driver
+  because PyVISA shares manager sessions. Disconnect explicitly before reconnecting.
 - Wavelengths are in nm, scan speed is in nm/min, and VISA timeouts are in ms.
   Scanning uses `NM`, direct positioning uses `GOTO`, and numeric wavelength
   and scan-speed commands use one decimal place. Review temporary timeout
