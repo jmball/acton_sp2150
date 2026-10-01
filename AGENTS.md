@@ -82,6 +82,11 @@ explicit resource, wavelength, grating, turret, and filter arguments (see README
 It exercises all public commands and attempts state restoration after each test.
 Use `--test test_turret_information` to isolate the reinstated `?TURRETS` command.
 Do not skip its failures merely because that command previously had firmware issues.
+Use `--test test_home_filter_timing` to measure homing from all six filter
+positions, including home. `--home-repetitions` repeats the sweep and
+`--filter-home-timeout-ms` overrides the tested homing allowance. This test uses
+the exact allowance during FHOME so a longer general timeout cannot mask an
+invalid estimate; it reports durations, headroom, and the slowest observation.
 
 ## Change conventions
 

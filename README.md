@@ -166,6 +166,31 @@ Use `--resource-option 'query_delay=0.05'` for additional connection options
 (`KEY=JSON`, repeatable), or `--resource-option 'open_timeout=2000'` for opening
 options. Fixed device settings warn and are ignored. The expected filter home
 position defaults to 1 and can be set with `--home-filter-position`.
+The hardware suite also includes `test_home_filter_timing`: it positions the wheel
+at each of positions 1 through 6 (including home), then times `FHOME` alone using
+a monotonic clock and checks the final position. It reports each elapsed time,
+remaining headroom in seconds and percent, and the slowest observed case.
+During homing this test applies the driver's homing allowance exactly, even when
+the general `--timeout` is longer, then restores the previous resource timeout.
+Timeouts, an exceeded allowance, and incorrect final positions fail the test.
+
+To isolate this measurement and repeat the sweep three times:
+
+```sh
+uv run python -m tests.hardware \
+  --resource-name 'ASRL2::INSTR' --visa-backend '@py' \
+  --wavelength 500 --scan-wavelength 501 --turret 1 --grating 1 \
+  --filter-position 2 --test test_home_filter_timing --home-repetitions 3
+```
+
+Use `--filter-home-timeout-ms 30000` to measure against a different allowance;
+the default follows `filter_home_timeout_ms` from the driver (currently 20000 ms).
+The timing covers communication and command completion, excluding positioning
+and the subsequent position query. The test attempts to restore the original
+instrument state afterward. Passing establishes the observed timing margin for
+your hardware and tested starting positions; it does not establish a universal
+worst-case duration.
+
 `--visa-backend` can be omitted to use the system-selected backend. Backend
 dependencies must be installed; for serial communication with `@py`, include
 pyserial with `uv run --with pyserial python -m tests.hardware ...`.

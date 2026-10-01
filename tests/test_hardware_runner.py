@@ -133,6 +133,7 @@ class HardwareRunnerTests(unittest.TestCase):
             ["--resource-option", "query_delay=0.1", "--resource-option", "query_delay=0.2"],
             ["--scan-speed", "0"], ["--scan-speed", "nan"],
             ["--scan-wavelength", "500"], ["--timeout", "-1"],
+            ["--home-repetitions", "0"], ["--filter-home-timeout-ms", "0"],
         ):
             with self.subTest(extra=extra), redirect_stderr(io.StringIO()):
                 factory = Mock()
@@ -159,3 +160,127 @@ class HardwareRunnerTests(unittest.TestCase):
     def test_hardware_targets_are_required_before_any_connection(self):
         with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
             hardware.main(["--resource-name", "ASRL2::INSTR"], manager_factory=Mock())
+
+    def test_homing_timing_covers_every_position_and_reports_worst_case(self):
+        output = io.StringIO()
+        durations = (1, 4, 8, 17.25, 10, 5)
+        clock = [value for start, duration in zip(range(0, 120, 20), durations)
+                 for value in (start, start + duration)]
+        observed_timeouts = []
+
+        def factory(backend):
+            manager = self.manager_factory(backend)
+            resource = self.resources[-1]
+            original_query = resource.query
+
+            def query(command):
+                if command == "FHOME":
+                    observed_timeouts.append(resource.timeout)
+                return original_query(command)
+
+            resource.query = query
+            return manager
+
+        with patch("tests.hardware.perf_counter", side_effect=clock):
+            result = hardware.main(
+                self.arguments + ["--test", "test_home_filter_timing"],
+                manager_factory=factory, stream=output,
+            )
+        self.assertEqual(result, 0, output.getvalue())
+        self.assertEqual(observed_timeouts, [20000] * 6)
+        for position in range(1, 7):
+            self.assertIn(f"Homing from filter {position}, repeat 1:", output.getvalue())
+        self.assertIn("headroom +2.750 s (+13.8%)", output.getvalue())
+        self.assertIn("Slowest homing: filter 4, repeat 1, 17.250 s", output.getvalue())
+        self.assertEqual(self.resources[0].timeout, 30000)
+        self.assert_restored_and_closed()
+
+    def test_homing_timing_supports_repeats_and_custom_allowance(self):
+        output = io.StringIO()
+        observed_timeouts = []
+
+        def factory(backend):
+            manager = self.manager_factory(backend)
+            resource = self.resources[-1]
+            original_query = resource.query
+
+            def query(command):
+                if command == "FHOME":
+                    observed_timeouts.append(resource.timeout)
+                return original_query(command)
+
+            resource.query = query
+            return manager
+
+        clock = [value for start in range(0, 24, 2) for value in (start, start + 1)]
+        with patch("tests.hardware.perf_counter", side_effect=clock):
+            result = hardware.main(
+                self.arguments + ["--test", "test_home_filter_timing", "--home-repetitions", "2",
+                                  "--filter-home-timeout-ms", "45000"],
+                manager_factory=factory, stream=output,
+            )
+        self.assertEqual(result, 0, output.getvalue())
+        self.assertEqual(observed_timeouts, [45000] * 12)
+        self.assertIn("Homing from filter 6, repeat 2", output.getvalue())
+        self.assertEqual(self.resources[0].timeout, 30000)
+        self.assert_restored_and_closed()
+
+    def test_homing_timing_fails_when_estimate_is_exceeded(self):
+        output = io.StringIO()
+        clock = [value for start in range(0, 180, 30) for value in (start, start + 21)]
+        with patch("tests.hardware.perf_counter", side_effect=clock):
+            result = hardware.main(
+                self.arguments + ["--test", "test_home_filter_timing"],
+                manager_factory=self.manager_factory, stream=output,
+            )
+        self.assertEqual(result, 1)
+        self.assertIn("Homing exceeded its timeout allowance", output.getvalue())
+        self.assertIn("headroom -1.000 s", output.getvalue())
+        self.assertEqual(self.resources[0].timeout, 30000)
+        self.assert_restored_and_closed()
+
+    def test_homing_timeout_is_reported_with_timing_and_cleanup(self):
+        output = io.StringIO()
+
+        def factory(backend):
+            manager = self.manager_factory(backend)
+            self.resources[-1].fail_command = "FHOME"
+            return manager
+
+        clock = [value for start in range(0, 120, 20) for value in (start, start + 20)]
+        with patch("tests.hardware.perf_counter", side_effect=clock):
+            result = hardware.main(
+                self.arguments + ["--test", "test_home_filter_timing"],
+                manager_factory=factory, stream=output,
+            )
+        self.assertEqual(result, 1)
+        self.assertIn("query failed", output.getvalue())
+        self.assertIn("Homing from filter 6, repeat 1: 20.000 s", output.getvalue())
+        self.assertEqual(self.resources[0].timeout, 30000)
+        self.assert_restored_and_closed()
+
+    def test_homing_timing_checks_final_position(self):
+        output = io.StringIO()
+
+        def factory(backend):
+            manager = self.manager_factory(backend)
+            resource = self.resources[-1]
+            original_query = resource.query
+
+            def query(command):
+                result = original_query(command)
+                if command == "FHOME":
+                    resource.filter = 2
+                return result
+
+            resource.query = query
+            return manager
+
+        result = hardware.main(
+            self.arguments + ["--test", "test_home_filter_timing"],
+            manager_factory=factory, stream=output,
+        )
+        self.assertEqual(result, 1)
+        self.assertIn("2 != 1", output.getvalue())
+        self.assertEqual(self.resources[0].timeout, 30000)
+        self.assert_restored_and_closed()

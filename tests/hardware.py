@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 import json
 import math
 import sys
+from time import perf_counter
 from typing import Any, Callable, Sequence, TextIO
 import unittest
 
@@ -33,6 +34,8 @@ class HardwareOptions:
     timeout: int = 30000
     scan_speed: float = 600.0
     home_filter_position: int = 1
+    home_repetitions: int = 1
+    filter_home_timeout_ms: int | None = None
     resource_options: dict[str, Any] = field(default_factory=dict)
 
 
@@ -44,10 +47,13 @@ class HardwareTests(InstrumentContract, unittest.TestCase):
         method_name: str,
         options: HardwareOptions,
         manager_factory: Callable[[str], pyvisa.ResourceManager] | None = None,
+        *,
+        timing_stream: TextIO | None = None,
     ) -> None:
         super().__init__(method_name)
         self.options = options
         self.manager_factory = manager_factory
+        self.timing_stream = timing_stream if timing_stream is not None else sys.stderr
         self.wavelength_target = options.wavelength
         self.scan_target = options.scan_wavelength
         self.scan_speed_target = options.scan_speed
@@ -62,6 +68,8 @@ class HardwareTests(InstrumentContract, unittest.TestCase):
         # unittest runs cleanups in reverse order, even when a test fails.
         self.addCleanup(manager.close)
         self.device = sp2150()
+        if self.options.filter_home_timeout_ms is not None:
+            self.device.filter_home_timeout_ms = self.options.filter_home_timeout_ms
         self.addCleanup(self.device.disconnect)
         self.device.connect(
             self.options.resource_name,
@@ -74,6 +82,45 @@ class HardwareTests(InstrumentContract, unittest.TestCase):
             for name in ("turret", "grating", "scan_speed", "wavelength", "filter")
         }
         self.addCleanup(self.restore_state)
+
+    def test_home_filter_timing(self) -> None:
+        """Measure homing from every position, testing the exact homing allowance."""
+        instr = self.device._instr
+        assert instr is not None
+        allowance_ms = self.device.filter_home_timeout_ms
+        measurements: list[tuple[int, int, float]] = []
+        for repeat in range(1, self.options.home_repetitions + 1):
+            for position in range(1, 7):
+                with self.subTest(position=position, repeat=repeat):
+                    self.device.filter = position
+                    self.assertEqual(self.device.filter, position)
+                    old_timeout = instr.timeout
+                    # A longer general I/O timeout must not hide a bad estimate.
+                    instr.timeout = allowance_ms
+                    start = perf_counter()
+                    try:
+                        self.device.home_filter()
+                    finally:
+                        elapsed_ms = (perf_counter() - start) * 1000
+                        measurements.append((position, repeat, elapsed_ms))
+                        margin_ms = allowance_ms - elapsed_ms
+                        print(
+                            f"\nHoming from filter {position}, repeat {repeat}: "
+                            f"{elapsed_ms / 1000:.3f} s; allowance {allowance_ms / 1000:.3f} s; "
+                            f"headroom {margin_ms / 1000:+.3f} s "
+                            f"({100 * margin_ms / allowance_ms:+.1f}%)",
+                            file=self.timing_stream, flush=True,
+                        )
+                        instr.timeout = old_timeout
+                    self.assertEqual(self.device.filter, self.home_filter_position)
+                    self.assertLessEqual(elapsed_ms, allowance_ms, "Homing exceeded its timeout allowance")
+        if measurements:
+            position, repeat, elapsed_ms = max(measurements, key=lambda measurement: measurement[2])
+            print(
+                f"\nSlowest homing: filter {position}, repeat {repeat}, {elapsed_ms / 1000:.3f} s; "
+                f"headroom {(allowance_ms - elapsed_ms) / 1000:+.3f} s",
+                file=self.timing_stream, flush=True,
+            )
 
     def restore_state(self) -> None:
         """Attempt every restoration, then report any failure to unittest."""
@@ -92,9 +139,14 @@ def build_suite(
     options: HardwareOptions,
     names: Sequence[str] | None = None,
     manager_factory: Callable[[str], pyvisa.ResourceManager] | None = None,
+    *,
+    timing_stream: TextIO | None = None,
 ) -> unittest.TestSuite:
     names = names or unittest.defaultTestLoader.getTestCaseNames(HardwareTests)
-    return unittest.TestSuite(HardwareTests(name, options, manager_factory) for name in names)
+    return unittest.TestSuite(
+        HardwareTests(name, options, manager_factory, timing_stream=timing_stream)
+        for name in names
+    )
 
 
 def _positive_int(value: str) -> int:
@@ -128,6 +180,8 @@ def parse_options(argv: Sequence[str] | None = None) -> tuple[HardwareOptions, l
     parser.add_argument("--turret", type=_positive_int, required=True, help="Installed turret number")
     parser.add_argument("--filter-position", type=_positive_int, required=True, help="Valid filter wheel position")
     parser.add_argument("--home-filter-position", type=_positive_int, default=1, help="Expected position after FHOME (default: 1)")
+    parser.add_argument("--home-repetitions", type=_positive_int, default=1, help="Timing-test sweeps of all six filter positions")
+    parser.add_argument("--filter-home-timeout-ms", type=_positive_int, help="Homing allowance in ms (default: driver's allowance), tested exactly by the timing test")
     parser.add_argument(
         "--resource-option", action="append", default=[], metavar="KEY=JSON",
         help="Additional driver resource option, repeatable (e.g. query_delay=0.05)",
@@ -169,6 +223,8 @@ def parse_options(argv: Sequence[str] | None = None) -> tuple[HardwareOptions, l
         turret=args.turret,
         filter_position=args.filter_position,
         home_filter_position=args.home_filter_position,
+        home_repetitions=args.home_repetitions,
+        filter_home_timeout_ms=args.filter_home_timeout_ms,
         resource_options=resource_options,
     )
     return options, args.test
@@ -182,7 +238,7 @@ def main(
 ) -> int:
     options, names = parse_options(argv)
     result = unittest.TextTestRunner(verbosity=2, stream=stream).run(
-        build_suite(options, names, manager_factory)
+        build_suite(options, names, manager_factory, timing_stream=stream)
     )
     return 0 if result.wasSuccessful() else 1
 
