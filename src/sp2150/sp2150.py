@@ -46,7 +46,7 @@ class sp2150:
 
     def __init__(self) -> None:
         """Construct object."""
-        self.instr: MessageBasedResource | None = None
+        self._instr: MessageBasedResource | None = None
         self._resource_manager: pyvisa.ResourceManager | None = None
 
     def __enter__(self) -> sp2150:
@@ -106,7 +106,7 @@ class sp2150:
         session. Failures after open_resource returns close the session and leave
         this object disconnected. Failures inside open_resource use PyVISA cleanup.
         """
-        if self.instr is not None:
+        if self._instr is not None:
             raise RuntimeError("Already connected; disconnect before reconnecting")
         _discard_fixed_options(resource_kwargs)
         if resource_manager is None:
@@ -134,7 +134,7 @@ class sp2150:
             except Exception:
                 _LOGGER.warning("Failed to close the instrument after an error", exc_info=True)
             raise
-        self.instr = instr
+        self._instr = instr
         self._resource_manager = resource_manager
 
     def disconnect(self) -> None:
@@ -143,8 +143,8 @@ class sp2150:
         The manager remains open because PyVISA may share it with other callers.
         State is cleared even if closing the instrument raises an exception.
         """
-        instr = self.instr
-        self.instr = None
+        instr = self._instr
+        self._instr = None
         try:
             if instr is not None:
                 instr.close()
@@ -153,9 +153,9 @@ class sp2150:
 
     def _require_connection(self) -> MessageBasedResource:
         """Return the live resource or raise a clear connection-state error."""
-        if self.instr is None:
+        if self._instr is None:
             raise RuntimeError("Instrument is not connected")
-        return self.instr
+        return self._instr
 
     def _query(self, cmd: str) -> str:
         """Query a command, stripping space at beginning of the response and the unit.

@@ -102,6 +102,8 @@ Do not skip its failures merely because that command previously had firmware iss
   The resource manager is
   keyword-only and retained while connected, but never closed by the driver
   because PyVISA shares manager sessions. Disconnect explicitly before reconnecting.
+  The underlying VISA resource is private (`_instr`); callers use the driver API
+  for commands and connection lifecycle.
 - Wavelengths are in nm, scan speed is in nm/min, and VISA timeouts are in ms.
   Scanning uses `NM`, direct positioning uses `GOTO`, and numeric wavelength
   and scan-speed commands use one decimal place. Review temporary timeout

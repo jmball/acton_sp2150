@@ -22,7 +22,7 @@ class sp2150:
         self._turret_info = "dummy info"
         self._filter = 1
 
-        self.instr: None = None
+        self._instr: None = None
         self._connected = False
 
     def __enter__(self) -> sp2150:

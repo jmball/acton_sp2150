@@ -62,7 +62,7 @@ class ConnectionTests(unittest.TestCase):
             with self.subTest(name=name), self.assertWarnsRegex(UserWarning, name):
                 self.connect(**{name: value})
             self.manager.open_resource.assert_called_with("serial-alias")
-            self.assertIs(self.device.instr, self.resource)
+            self.assertIs(self.device._instr, self.resource)
             self.device.disconnect()
             simulator = virtual_sp2150()
             with self.assertWarnsRegex(UserWarning, name):
@@ -94,13 +94,13 @@ class ConnectionTests(unittest.TestCase):
         self.assertIs(raised.exception, error)
         self.manager.open_resource.assert_called_once_with("serial-alias", timeuot=1000)
         self.assertEqual(self.resource.close_count, 0)
-        self.assertIsNone(self.device.instr)
+        self.assertIsNone(self.device._instr)
 
     def test_resource_class_override_cannot_bypass_fixed_serial_configuration(self):
         with self.assertWarnsRegex(UserWarning, "resource_pyclass"):
             self.connect(resource_pyclass=FakeMessage)
         self.manager.open_resource.assert_called_once_with("serial-alias")
-        self.assertIs(self.device.instr, self.resource)
+        self.assertIs(self.device._instr, self.resource)
         self.assertEqual(self.resource.baud_rate, 9600)
 
     def test_writable_interface_specific_attribute_is_supported(self):
@@ -146,7 +146,7 @@ class ConnectionTests(unittest.TestCase):
         self.device.disconnect()
         self.device.disconnect()
         self.assertEqual(self.resource.close_count, 1)
-        self.assertIsNone(self.device.instr)
+        self.assertIsNone(self.device._instr)
         self.assertIsNone(self.device._resource_manager)
         self.manager.close.assert_not_called()
 
@@ -155,7 +155,7 @@ class ConnectionTests(unittest.TestCase):
         self.resource.fail_close = True
         with self.assertRaises(OSError):
             self.device.disconnect()
-        self.assertIsNone(self.device.instr)
+        self.assertIsNone(self.device._instr)
         self.assertIsNone(self.device._resource_manager)
         self.device.disconnect()
 
@@ -163,7 +163,7 @@ class ConnectionTests(unittest.TestCase):
         self.manager.open_resource.side_effect = OSError("open failed")
         with self.assertRaisesRegex(OSError, "open failed"):
             self.connect()
-        self.assertIsNone(self.device.instr)
+        self.assertIsNone(self.device._instr)
         self.assertIsNone(self.device._resource_manager)
         self.manager.close.assert_not_called()
 
@@ -172,7 +172,7 @@ class ConnectionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "attribute rejected"):
             self.connect(timeout=2000)
         self.assertEqual(self.resource.close_count, 0)
-        self.assertIsNone(self.device.instr)
+        self.assertIsNone(self.device._instr)
         self.assertIsNone(self.device._resource_manager)
         self.manager.close.assert_not_called()
 
@@ -188,7 +188,7 @@ class ConnectionTests(unittest.TestCase):
         with self.assertRaises(TimeoutError):
             self.connect()
         self.assertEqual(self.resource.close_count, 1)
-        self.assertIsNone(self.device.instr)
+        self.assertIsNone(self.device._instr)
         self.resource.fail_command = None
         self.connect()
 
@@ -197,7 +197,7 @@ class ConnectionTests(unittest.TestCase):
         self.resource.fail_close = True
         with self.assertLogs("sp2150.sp2150", level="WARNING"), self.assertRaises(TimeoutError):
             self.connect()
-        self.assertIsNone(self.device.instr)
+        self.assertIsNone(self.device._instr)
 
     def test_context_cleanup_preserves_body_exception(self):
         self.connect()
@@ -205,7 +205,7 @@ class ConnectionTests(unittest.TestCase):
         with self.assertLogs("sp2150.sp2150", level="WARNING"), self.assertRaisesRegex(ValueError, "body failed"):
             with self.device:
                 raise ValueError("body failed")
-        self.assertIsNone(self.device.instr)
+        self.assertIsNone(self.device._instr)
 
     def test_context_cleanup_reports_close_error_when_body_succeeded(self):
         self.connect()
