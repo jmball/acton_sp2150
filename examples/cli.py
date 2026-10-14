@@ -76,8 +76,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             parser.error(f"{args.function} requires a valid {converter.__name__} parameter")
         if isinstance(parameter, float) and not math.isfinite(parameter):
             parser.error("--parameter must be finite")
-        if args.function == "set_scan_speed" and float(f"{parameter:.1f}") <= 0:
-            parser.error("scan speed must be positive at the device's one-decimal precision")
+        if args.function == "set_scan_speed" and round(parameter, 1) <= 0:
+            parser.error("scan speed must be positive after rounding to one decimal place")
     elif args.parameter is not None:
         parser.error(f"{args.function} does not accept --parameter")
 

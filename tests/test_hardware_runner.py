@@ -170,7 +170,8 @@ def test_connection_options_are_forwarded(hardware_project):
 @pytest.mark.parametrize("extra", [
     ["--resource-option", "timeout=1000"], ["--resource-option", "query_delay=broken"],
     ["--resource-option", "query_delay=0.1", "--resource-option", "query_delay=0.2"],
-    ["--scan-speed", "0"], ["--scan-speed", "nan"], ["--scan-wavelength", "500"],
+    ["--scan-speed", "0"], ["--scan-speed", "0.049"], ["--scan-speed", "nan"], ["--scan-wavelength", "500"],
+    ["--wavelength", "0", "--scan-wavelength", "-0.0"],
     ["--timeout", "-1"], ["--home-repetitions", "0"], ["--filter-home-timeout-ms", "0"],
 ])
 def test_invalid_options_never_open_hardware(hardware_project, extra):

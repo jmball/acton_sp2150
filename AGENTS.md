@@ -135,7 +135,11 @@ Neither default runs nor --collect-only may contact hardware.
   for commands and connection lifecycle.
 - Wavelengths are in nm, scan speed is in nm/min, and VISA timeouts are in ms.
   Scanning uses `NM`, direct positioning uses `GOTO`, and numeric wavelength
-  and scan-speed commands use one decimal place. Review temporary timeout
+  and scan-speed commands use one decimal place. The manual specifies 0.1 nm
+  wavelength positioning; one-decimal scan speed is a driver convention whose
+  device resolution still needs confirmation. Use round(value, 1) for numeric
+  rounding and formatting only to construct command strings or display text.
+  Review temporary timeout
   restoration and resource cleanup when changing error handling.
   Both implementations reject nonfinite wavelength/scan-speed inputs and require
   scan speed to remain positive after rounding. Scanning also validates hardware

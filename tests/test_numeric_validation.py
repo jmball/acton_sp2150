@@ -28,7 +28,7 @@ def test_nonfinite_wavelengths_and_scan_targets_send_no_commands(instrument, res
     assert instrument.wavelength == original
 
 
-def test_valid_values_retain_device_precision(instrument):
+def test_valid_values_retain_driver_precision(instrument):
     for value, expected in (("0.06", 0.1), (123.46, 123.5)):
         instrument.scan_speed = value
         assert instrument.scan_speed == expected

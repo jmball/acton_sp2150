@@ -83,9 +83,9 @@ def pytest_configure(config: pytest.Config) -> None:
         value = config.getoption(name)
         if not math.isfinite(value) or value < 0:
             raise pytest.UsageError(f"--{name.replace('_', '-')} must be finite and nonnegative")
-    if float(f"{config.getoption('scan_speed'):.1f}") <= 0:
+    if round(config.getoption("scan_speed"), 1) <= 0:
         raise pytest.UsageError("--scan-speed must remain positive after rounding")
-    if f"{config.getoption('wavelength'):.1f}" == f"{config.getoption('scan_wavelength'):.1f}":
+    if round(config.getoption("wavelength"), 1) == round(config.getoption("scan_wavelength"), 1):
         raise pytest.UsageError("Wavelength targets must differ at 0.1 nm precision")
     options: dict[str, Any] = {}
     for item in config.getoption("resource_option"):

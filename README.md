@@ -95,8 +95,8 @@ ignored; the simulator does not reproduce PyVISA option validation errors.
 It supports the same explicit reconnect
 behavior and converts numeric setters to the hardware driver's numeric types;
 operations require `connect()` just as they do with the hardware driver.
-Wavelength and scan speed use the same one-decimal precision, and state persists
-across disconnect/reconnect. Simulation uses immediate in-memory state changes;
+Wavelength and scan speed match the driver's one-decimal formatting, and state
+persists across disconnect/reconnect. Simulation uses immediate in-memory state changes;
 it does not emulate movement time, hardware faults, or installed grating limits.
 
 Both implementations reject nonfinite wavelength and scan-speed inputs with
@@ -104,6 +104,12 @@ Both implementations reject nonfinite wavelength and scan-speed inputs with
 (for example, `0.01` nm/min is rejected because it rounds to zero). Invalid inputs
 do not send commands or change state. Before scanning, the hardware driver also
 requires a finite, positive scan speed read back from the instrument.
+
+The [SP-2150i manual, section IV-B](https://www.princetoninstruments.com/wp-content/uploads/2020/04/SP-2150i.pdf)
+specifies wavelength positioning to the nearest 0.1 nm. One-decimal scan-speed
+formatting is an existing driver convention: the manual gives a one-decimal
+example but does not establish that as the supported scan-speed resolution.
+That resolution still needs confirmation before changing the convention.
 
 Operation timeout allowances are configurable attributes in milliseconds:
 

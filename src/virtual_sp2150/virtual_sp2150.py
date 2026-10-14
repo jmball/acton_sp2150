@@ -136,13 +136,14 @@ class sp2150:
         Parameters
         ----------
         speed : float or str
-            Finite scan speed in nm/min. Rounded to one decimal place;
-            the rounded value must be positive.
+            Finite scan speed in nm/min. Rounded to one decimal place to
+            match the driver convention; the rounded value must be positive.
+            This is not a verified device resolution.
         """
         self._check_connection()
         speed = round(_finite_number(speed, "Scan speed"), 1)
         if speed <= 0:
-            raise ValueError("Scan speed must be positive at the device's one-decimal precision")
+            raise ValueError("Scan speed must be positive after rounding to one decimal place")
         self._scan_speed = speed
 
     def scan_to_wavelength(self, wavelength: Number) -> None:
@@ -179,7 +180,7 @@ class sp2150:
             Finite target wavelength in nm, rounded to one decimal place.
         """
         self._check_connection()
-        self._wavelength = float(f"{_finite_number(wavelength, 'Wavelength'):.1f}")
+        self._wavelength = round(_finite_number(wavelength, "Wavelength"), 1)
 
     @property
     def grating(self) -> int:

@@ -357,12 +357,13 @@ class sp2150:
         Parameters
         ----------
         speed : float or str
-            Finite scan speed in nm/min. Rounded to one decimal place;
-            the rounded value must be positive.
+            Finite scan speed in nm/min. The driver formats this to one
+            decimal place; the rounded value must be positive. This is a
+            driver convention, not a verified device resolution.
         """
         speed = round(_finite_number(speed, "Scan speed"), 1)
         if speed <= 0:
-            raise ValueError("Scan speed must be positive at the device's one-decimal precision")
+            raise ValueError("Scan speed must be positive after rounding to one decimal place")
         self._query(f"{speed:.1f} NM/MIN")
 
     def scan_to_wavelength(self, wavelength: Number) -> None:
@@ -380,7 +381,7 @@ class sp2150:
         instr = self._instr
         if instr is None:
             raise RuntimeError(_NOT_CONNECTED)
-        wavelength = float(f"{_finite_number(wavelength, 'Wavelength'):.1f}")
+        wavelength = round(_finite_number(wavelength, "Wavelength"), 1)
         buffer_ms = _finite_number(self.scan_timeout_buffer_ms, "Scan timeout buffer")
         if buffer_ms < 0:
             raise ValueError("Scan timeout buffer must be nonnegative")
