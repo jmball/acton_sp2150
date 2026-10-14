@@ -82,3 +82,60 @@ def test_disconnected_operations_match():
             device.scan_to_wavelength(500)
         with pytest.raises(RuntimeError, match='not connected'):
             device.home_filter()
+
+
+_VALIDATION_CASES = []
+for operation, valid_value, expected_value in (
+    ("scan_speed", "123.46", 123.5),
+    ("wavelength", "532.26", 532.3),
+    ("scan_to_wavelength", "532.26", 532.3),
+    ("grating", "2", 2),
+    ("turret", "2", 2),
+    ("filter", "3", 3),
+):
+    _VALIDATION_CASES.append(pytest.param(
+        operation, valid_value, None, expected_value, id=f"{operation}-valid",
+    ))
+    integer_operation = operation in ("grating", "turret", "filter")
+    for value, label in (("bad", "invalid-string"), (float("nan"), "nan"),
+                         (float("inf"), "infinity"), (float("-inf"), "negative-infinity")):
+        error_type = OverflowError if integer_operation and label.endswith("infinity") else ValueError
+        _VALIDATION_CASES.append(pytest.param(
+            operation, value, error_type, None, id=f"{operation}-{label}",
+        ))
+for value, label in ((0, "zero"), (-1, "negative"), (0.01, "rounded-zero")):
+    _VALIDATION_CASES.append(pytest.param(
+        "scan_speed", value, ValueError, None, id=f"scan_speed-{label}",
+    ))
+
+
+@pytest.mark.parametrize("connected", [True, False], ids=["connected", "disconnected"])
+@pytest.mark.parametrize("operation,value,error_type,expected_value", _VALIDATION_CASES)
+def test_argument_validation_precedes_connection_check(
+    instrument, resource, manager, connected, operation, value, error_type, expected_value,
+):
+    names = ("scan_speed", "wavelength", "grating", "turret", "filter")
+    initial_state = {name: getattr(instrument, name) for name in names}
+    if not connected:
+        instrument.disconnect()
+    resource.commands.clear()
+    expected_error = error_type if error_type is not None else (None if connected else RuntimeError)
+
+    def invoke():
+        if operation == "scan_to_wavelength":
+            instrument.scan_to_wavelength(value)
+        else:
+            setattr(instrument, operation, value)
+
+    if expected_error is None:
+        invoke()
+        property_name = "wavelength" if operation == "scan_to_wavelength" else operation
+        assert getattr(instrument, property_name) == expected_value
+    else:
+        match = "Instrument is not connected" if expected_error is RuntimeError else None
+        with pytest.raises(expected_error, match=match):
+            invoke()
+        assert resource.commands == []
+        if not connected:
+            instrument.connect("fake", resource_manager=manager)
+        assert {name: getattr(instrument, name) for name in names} == initial_state

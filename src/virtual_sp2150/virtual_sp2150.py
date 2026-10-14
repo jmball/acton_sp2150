@@ -17,6 +17,7 @@ class sp2150:
     Connect before using instrument commands. Operations update memory
     immediately. Timeout attributes are accepted for API compatibility
     and do not affect simulation timing.
+    Numeric command inputs are validated before checking connection state.
 
     Attributes
     ----------
@@ -140,10 +141,10 @@ class sp2150:
             match the driver convention; the rounded value must be positive.
             This is not a verified device resolution.
         """
-        self._check_connection()
         speed = round(_to_finite_float(speed), 1)
         if speed <= 0:
             raise ValueError("Scan speed must be positive after rounding to one decimal place")
+        self._check_connection()
         self._scan_speed = speed
 
     def scan_to_wavelength(self, wavelength: Number) -> None:
@@ -179,8 +180,9 @@ class sp2150:
         wavelength : float or str
             Finite target wavelength in nm, rounded to one decimal place.
         """
+        wavelength = round(_to_finite_float(wavelength), 1)
         self._check_connection()
-        self._wavelength = round(_to_finite_float(wavelength), 1)
+        self._wavelength = wavelength
 
     @property
     def grating(self) -> int:
@@ -203,8 +205,9 @@ class sp2150:
         grating : int or str
             Grating number, converted to an integer.
         """
+        grating = int(grating)
         self._check_connection()
-        self._grating = int(grating)
+        self._grating = grating
 
     @property
     def turret(self) -> int:
@@ -227,8 +230,9 @@ class sp2150:
         turret : int or str
             Turret number, converted to an integer.
         """
+        turret = int(turret)
         self._check_connection()
-        self._turret = int(turret)
+        self._turret = turret
 
     @property
     def grating_info(self) -> str:
@@ -275,8 +279,9 @@ class sp2150:
         filter_pos : int or str
             Filter position number, converted to an integer.
         """
+        filter_pos = int(filter_pos)
         self._check_connection()
-        self._filter = int(filter_pos)
+        self._filter = filter_pos
 
     def home_filter(self) -> None:
         """Home the filter wheel to its first position."""

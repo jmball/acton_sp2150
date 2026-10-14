@@ -104,6 +104,11 @@ Both implementations reject nonfinite wavelength and scan-speed inputs with
 (for example, `0.01` nm/min is rejected because it rounds to zero). Invalid inputs
 do not send commands or change state. Before scanning, the hardware driver also
 requires a finite, positive scan speed read back from the instrument.
+Numeric command arguments are validated before connection state in both
+implementations. Invalid input reports its validation error even when
+disconnected; valid input on a disconnected device reports
+`RuntimeError("Instrument is not connected")`. Argument validation and
+connection-state failures do not change instrument state.
 
 The [SP-2150i manual, section IV-B](https://www.princetoninstruments.com/wp-content/uploads/2020/04/SP-2150i.pdf)
 specifies wavelength positioning to the nearest 0.1 nm. One-decimal scan-speed

@@ -113,6 +113,10 @@ Neither default runs nor --collect-only may contact hardware.
   historically had hardware issues, which the integration suite should expose.
   The simulator must match public signatures, connection-state errors, and numeric
   conversions/precision. Keep the shared contract current when the API changes.
+  Validate numeric command arguments before checking connection state in both
+  implementations. Invalid inputs retain their validation errors when disconnected;
+  valid inputs require an active connection. Rejected arguments and disconnected
+  operations must preserve state.
 - Preserve protocol details intentionally: writes terminate with `\r`, reads
   with ` ok\r\n`, and connection setup sends `NO-ECHO`. `_write`, `_query`,
   and `_read_bytes` check connection state; `_query` returns the unparsed PyVISA

@@ -77,6 +77,7 @@ class sp2150:
     Connect before using instrument commands. Operation allowances extend
     the resource timeout when needed and restore it afterward. A longer
     or infinite caller timeout is preserved.
+    Numeric command inputs are validated before checking connection state.
 
     Attributes
     ----------
@@ -376,10 +377,9 @@ class sp2150:
         wavelength : float or str
             Finite target wavelength in nm, rounded to one decimal place.
         """
-        instr = self._instr
-        if instr is None:
-            raise RuntimeError(_NOT_CONNECTED)
         wavelength = round(_to_finite_float(wavelength), 1)
+        if self._instr is None:
+            raise RuntimeError(_NOT_CONNECTED)
         buffer_ms = _to_finite_float(self.scan_timeout_buffer_ms)
         if buffer_ms < 0:
             raise ValueError("Scan timeout buffer must be nonnegative")
