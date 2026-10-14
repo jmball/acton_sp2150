@@ -52,7 +52,7 @@ class sp2150:
 
         Returns
         -------
-        sp2150
+        self : sp2150
             This instrument instance; entering the context does not connect it.
         """
         return self
@@ -123,7 +123,7 @@ class sp2150:
 
         Returns
         -------
-        float
+        scan_speed : float
             Scan speed in nm/min.
         """
         self._check_connection()
@@ -163,7 +163,7 @@ class sp2150:
 
         Returns
         -------
-        float
+        wavelength : float
             Wavelength in nm.
         """
         self._check_connection()
@@ -187,7 +187,7 @@ class sp2150:
 
         Returns
         -------
-        int
+        grating : int
             Grating number on the active turret.
         """
         self._check_connection()
@@ -211,7 +211,7 @@ class sp2150:
 
         Returns
         -------
-        int
+        turret : int
             Turret number.
         """
         self._check_connection()
@@ -235,7 +235,7 @@ class sp2150:
 
         Returns
         -------
-        str
+        grating_info : str
             Placeholder grating information text.
         """
         self._check_connection()
@@ -247,7 +247,7 @@ class sp2150:
 
         Returns
         -------
-        str
+        turret_info : str
             Placeholder turret information text.
         """
         self._check_connection()
@@ -259,7 +259,7 @@ class sp2150:
 
         Returns
         -------
-        int
+        filter_pos : int
             Filter position number.
         """
         self._check_connection()

@@ -44,7 +44,7 @@ def _finite_number(value: Number, name: str) -> float:
 
     Returns
     -------
-    float
+    result : float
         The converted finite value.
     """
     result = float(value)
@@ -108,7 +108,7 @@ class sp2150:
 
         Returns
         -------
-        sp2150
+        self : sp2150
             This instrument instance; entering the context does not connect it.
         """
         return self
@@ -234,7 +234,7 @@ class sp2150:
 
         Returns
         -------
-        str
+        response : str
             The unparsed PyVISA response, with read termination removed.
         """
         if self._instr is None:
@@ -251,7 +251,7 @@ class sp2150:
 
         Returns
         -------
-        bytes
+        data : bytes
             The bytes read from the instrument.
         """
         if self._instr is None:
@@ -273,7 +273,7 @@ class sp2150:
 
         Yields
         ------
-        None
+        context : None
             Control to the operation using the temporary timeout.
         """
         instr = self._instr
@@ -308,7 +308,7 @@ class sp2150:
 
         Returns
         -------
-        str
+        value : str
             The first response value as text; numeric conversion is left to
             the caller.
         """
@@ -327,7 +327,7 @@ class sp2150:
 
         Returns
         -------
-        str
+        response : str
             ASCII response text without the terminator or outer whitespace.
             Internal line breaks and units are preserved.
         """
@@ -345,7 +345,7 @@ class sp2150:
 
         Returns
         -------
-        float
+        scan_speed : float
             Scan speed in nm/min.
         """
         return float(self._query_value("?NM/MIN"))
@@ -400,7 +400,7 @@ class sp2150:
 
         Returns
         -------
-        float
+        wavelength : float
             Wavelength in nm.
         """
         return float(self._query_value("?NM"))
@@ -422,7 +422,7 @@ class sp2150:
 
         Returns
         -------
-        int
+        grating : int
             Grating number on the active turret.
         """
         return int(self._query_value("?GRATING"))
@@ -448,7 +448,7 @@ class sp2150:
 
         Returns
         -------
-        int
+        turret : int
             Turret number.
         """
         return int(self._query_value("?TURRET"))
@@ -470,7 +470,7 @@ class sp2150:
 
         Returns
         -------
-        str
+        grating_info : str
             Text describing groove spacing and blaze wavelength for each
             grating. Internal line breaks are preserved.
         """
@@ -482,7 +482,7 @@ class sp2150:
 
         Returns
         -------
-        str
+        turret_info : str
             Text describing grating groove spacing for each turret.
             Internal line breaks are preserved.
         """
@@ -494,7 +494,7 @@ class sp2150:
 
         Returns
         -------
-        int
+        filter_pos : int
             Filter position number.
         """
         return int(self._query_value("?FILTER"))

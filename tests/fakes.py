@@ -15,7 +15,7 @@ def make_manager(resource):
 
     Returns
     -------
-    unittest.mock.Mock
+    manager : unittest.mock.Mock
         Manager whose open_resource applies keyword options to the
         supplied resource.
     """

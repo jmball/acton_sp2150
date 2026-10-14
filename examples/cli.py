@@ -42,7 +42,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     Returns
     -------
-    int
+    exit_code : int
         Zero after successful command execution.
     """
     parser = argparse.ArgumentParser(description=__doc__)
