@@ -32,15 +32,13 @@ _FIXED_OPTIONS = frozenset({
 })
 
 
-def _finite_number(value: Number, name: str) -> float:
+def _to_finite_float(value: Number) -> float:
     """Convert a numeric input, rejecting NaN and infinity.
 
     Parameters
     ----------
     value : float or str
         Value to convert to a finite float.
-    name : str
-        Value name used in the validation error message.
 
     Returns
     -------
@@ -49,7 +47,7 @@ def _finite_number(value: Number, name: str) -> float:
     """
     result = float(value)
     if not math.isfinite(result):
-        raise ValueError(f"{name} must be finite")
+        raise ValueError("Value must be finite")
     return result
 
 
@@ -279,7 +277,7 @@ class sp2150:
         instr = self._instr
         if instr is None:
             raise RuntimeError(_NOT_CONNECTED)
-        minimum_ms = _finite_number(minimum_ms, "Operation timeout")
+        minimum_ms = _to_finite_float(minimum_ms)
         if minimum_ms < 0:
             raise ValueError("Operation timeout must be nonnegative")
         old_timeout = instr.timeout
@@ -361,7 +359,7 @@ class sp2150:
             decimal place; the rounded value must be positive. This is a
             driver convention, not a verified device resolution.
         """
-        speed = round(_finite_number(speed, "Scan speed"), 1)
+        speed = round(_to_finite_float(speed), 1)
         if speed <= 0:
             raise ValueError("Scan speed must be positive after rounding to one decimal place")
         self._query(f"{speed:.1f} NM/MIN")
@@ -381,13 +379,13 @@ class sp2150:
         instr = self._instr
         if instr is None:
             raise RuntimeError(_NOT_CONNECTED)
-        wavelength = round(_finite_number(wavelength, "Wavelength"), 1)
-        buffer_ms = _finite_number(self.scan_timeout_buffer_ms, "Scan timeout buffer")
+        wavelength = round(_to_finite_float(wavelength), 1)
+        buffer_ms = _to_finite_float(self.scan_timeout_buffer_ms)
         if buffer_ms < 0:
             raise ValueError("Scan timeout buffer must be nonnegative")
         # calculate scan time in ms
         current_wavelength = self.wavelength
-        speed = _finite_number(self.scan_speed, "Reported scan speed")
+        speed = _to_finite_float(self.scan_speed)
         if speed <= 0:
             raise ValueError("Reported scan speed must be positive")
         scan_time = abs(wavelength - current_wavelength) * 60000 / speed
@@ -415,7 +413,7 @@ class sp2150:
         wavelength : float or str
             Finite target wavelength in nm, rounded to one decimal place.
         """
-        self._query(f"{_finite_number(wavelength, 'Wavelength'):.1f} GOTO")
+        self._query(f"{_to_finite_float(wavelength):.1f} GOTO")
 
     @property
     def grating(self) -> int:

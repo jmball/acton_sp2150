@@ -38,12 +38,18 @@ def test_valid_values_retain_driver_precision(instrument):
     assert instrument.wavelength == 0.0
 
 
-@pytest.mark.parametrize("speed", [0, -1, float("nan"), float("inf"), float("-inf")])
-def test_invalid_reported_scan_speed_stops_before_scan_or_timeout_change(connected_driver, resource, speed):
+@pytest.mark.parametrize("speed,expected_message", [
+    (0, "Reported scan speed must be positive"),
+    (-1, "Reported scan speed must be positive"),
+    (float("nan"), "Value must be finite"),
+    (float("inf"), "Value must be finite"),
+    (float("-inf"), "Value must be finite"),
+])
+def test_invalid_reported_scan_speed_stops_before_scan_or_timeout_change(connected_driver, resource, speed, expected_message):
     resource.scan_speed = speed
     resource.commands.clear()
     old_timeout = resource.timeout
-    with pytest.raises(ValueError, match="Reported scan speed"):
+    with pytest.raises(ValueError, match=expected_message):
         connected_driver.scan_to_wavelength(500)
     assert resource.commands == ["?NM", "?NM/MIN"]
     assert resource.timeout == old_timeout

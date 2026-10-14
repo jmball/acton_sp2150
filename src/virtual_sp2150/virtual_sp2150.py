@@ -7,7 +7,7 @@ from typing import Any
 
 import pyvisa
 from sp2150.sp2150 import (
-    Integer, Number, _NOT_CONNECTED, _discard_fixed_options, _finite_number,
+    Integer, Number, _NOT_CONNECTED, _discard_fixed_options, _to_finite_float,
 )
 
 
@@ -141,7 +141,7 @@ class sp2150:
             This is not a verified device resolution.
         """
         self._check_connection()
-        speed = round(_finite_number(speed, "Scan speed"), 1)
+        speed = round(_to_finite_float(speed), 1)
         if speed <= 0:
             raise ValueError("Scan speed must be positive after rounding to one decimal place")
         self._scan_speed = speed
@@ -180,7 +180,7 @@ class sp2150:
             Finite target wavelength in nm, rounded to one decimal place.
         """
         self._check_connection()
-        self._wavelength = round(_finite_number(wavelength, "Wavelength"), 1)
+        self._wavelength = round(_to_finite_float(wavelength), 1)
 
     @property
     def grating(self) -> int:
