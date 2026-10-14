@@ -99,6 +99,10 @@ Neither default runs nor --collect-only may contact hardware.
 
 ## Change conventions
 
+- Keep README concise: installation, editable installation, examples, testing,
+  and an optional link to LICENSE. Do not duplicate dependency versions, license
+  text, API details, or repository decision history there. Code and docstrings
+  are the main API documentation.
 - Follow the existing four-space indentation, property-based API, and NumPy-style
   parameter/return docstrings. Document units explicitly.
   Include Parameters for arguments other than self/cls and Returns for meaningful
