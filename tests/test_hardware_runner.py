@@ -7,7 +7,7 @@ import pytest
 
 
 HARDWARE_ARGS = [
-    "--run-hardware", "--resource-name", "ASRL2::INSTR", "--visa-backend=@py",
+    "--resource-name", "ASRL2::INSTR", "--visa-backend=@py",
     "--wavelength", "500", "--scan-wavelength", "501", "--grating", "2",
     "--turret", "1", "--filter-position", "3",
 ]
@@ -104,7 +104,7 @@ def test_collect_only_never_opens_hardware(hardware_project):
     assert not (hardware_project.path / "opened").exists()
 
 
-def test_mark_selection_still_requires_explicit_hardware_flag(hardware_project):
+def test_mark_selection_still_requires_resource_name(hardware_project):
     result = hardware_project.runpytest("-q", "-m", "hardware")
     result.assert_outcomes(skipped=15)
     assert not (hardware_project.path / "opened").exists()
@@ -180,8 +180,18 @@ def test_invalid_options_never_open_hardware(hardware_project, extra):
     assert not (hardware_project.path / "opened").exists()
 
 
-def test_targets_are_required_before_connection(hardware_project):
-    result = hardware_project.runpytest("-q", "--run-hardware", "--resource-name", "ASRL2::INSTR")
+def test_resource_name_enables_hardware_with_default_targets(hardware_project):
+    result = hardware_project.runpytest("-q", "--resource-name", "ASRL2::INSTR", "--visa-backend=@py")
+    result.assert_outcomes(passed=15)
+    commands = {command for entry in records(hardware_project) for command in entry["commands"]}
+    assert {"1 GRATING", "1 TURRET", "500.0 GOTO", "501.0 NM", "600.0 NM/MIN", "3 FILTER"} <= commands
+    assert "2 GRATING" not in commands
+    assert_restored(hardware_project)
+
+
+@pytest.mark.parametrize("name", ["", "   "])
+def test_empty_resource_name_is_rejected(hardware_project, name):
+    result = hardware_project.runpytest("-q", "--resource-name", name)
     assert result.ret == pytest.ExitCode.USAGE_ERROR
     assert not (hardware_project.path / "opened").exists()
 

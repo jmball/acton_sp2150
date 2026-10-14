@@ -37,16 +37,14 @@ Run the tests without hardware:
 uv run pytest
 ```
 
-Hardware tests require a connected instrument and valid targets:
+Run hardware tests against a connected instrument:
 
 ```sh
-uv run --with pyserial pytest tests/test_hardware.py --run-hardware \
-  --resource-name 'ASRL2::INSTR' --visa-backend=@py \
-  --wavelength 500 --scan-wavelength 501 \
-  --turret 1 --grating 1 --filter-position 2
+uv run pytest tests/test_hardware.py \
+  --resource-name 'ASRL2::INSTR' --visa-backend=@py
 ```
 
-Run `uv run pytest --help` for test options.
+See [tests/test_hardware.py](tests/test_hardware.py) for optional settings.
 
 ## License
 

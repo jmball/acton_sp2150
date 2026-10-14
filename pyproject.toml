@@ -17,7 +17,7 @@ classifiers = [
 ]
 dependencies = [
   "pyvisa",
-  "pyvisa-py",
+  "pyvisa-py[serial]",
 ]
 
 [project.urls]

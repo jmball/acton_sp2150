@@ -18,6 +18,7 @@ from tests.contract import ContractTargets
 
 @dataclass
 class HardwareOptions(ContractTargets):
+    grating: int = 1
     resource_name: str = ""
     visa_backend: str = ""
     timeout: int = 30000
@@ -48,16 +49,16 @@ _MEASUREMENTS = pytest.StashKey[list[HomingMeasurement]]()
 
 def pytest_addoption(parser: pytest.Parser) -> None:
     group = parser.getgroup("SP-2150 hardware")
-    group.addoption("--run-hardware", action="store_true", help="Enable tests that connect to and move real hardware")
-    group.addoption("--resource-name", help="VISA resource name or alias")
+    defaults = HardwareOptions()
+    group.addoption("--resource-name", help="VISA resource name or alias; enables hardware tests")
     group.addoption("--visa-backend", default="", help="VISA backend, e.g. @py")
     group.addoption("--timeout", type=int, default=30000, help="General hardware I/O timeout in ms")
-    group.addoption("--wavelength", type=float, help="Direct positioning target in nm")
-    group.addoption("--scan-wavelength", type=float, help="Distinct scan target in nm")
-    group.addoption("--scan-speed", type=float, default=600.0, help="Scan speed in nm/min")
-    group.addoption("--grating", type=int, help="Installed grating number")
-    group.addoption("--turret", type=int, help="Installed turret number")
-    group.addoption("--filter-position", type=int, help="Valid filter wheel position")
+    group.addoption("--wavelength", type=float, default=defaults.wavelength, help="Direct positioning target in nm")
+    group.addoption("--scan-wavelength", type=float, default=defaults.scan_wavelength, help="Distinct scan target in nm")
+    group.addoption("--scan-speed", type=float, default=defaults.scan_speed, help="Scan speed in nm/min")
+    group.addoption("--grating", type=int, default=defaults.grating, help="Grating number to test (default: 1)")
+    group.addoption("--turret", type=int, default=defaults.turret, help="Turret parameter set to test (default: 1)")
+    group.addoption("--filter-position", type=int, default=defaults.filter_position, help="Filter wheel position to test")
     group.addoption("--home-filter-position", type=int, default=1, help="Expected position after FHOME")
     group.addoption("--home-repetitions", type=int, default=1, help="Timing-test sweeps of all six positions")
     group.addoption("--filter-home-timeout-ms", type=int, help="Homing allowance tested exactly (default: driver allowance)")
@@ -65,16 +66,15 @@ def pytest_addoption(parser: pytest.Parser) -> None:
 
 
 def pytest_configure(config: pytest.Config) -> None:
-    config.addinivalue_line("markers", "hardware: connects to real hardware only with --run-hardware")
+    config.addinivalue_line("markers", "hardware: connects to real hardware only with --resource-name")
     config.stash[_MEASUREMENTS] = []
-    if not config.getoption("--run-hardware"):
+    if config.getoption("resource_name") is None:
         return
+    if not config.getoption("resource_name").strip():
+        raise pytest.UsageError("--resource-name must not be empty")
     if config.getoption("numprocesses", default=0):
         raise pytest.UsageError("Hardware tests must run sequentially; remove the -n option")
-    required = ("resource_name", "wavelength", "scan_wavelength", "grating", "turret", "filter_position")
-    missing = ["--" + name.replace("_", "-") for name in required if config.getoption(name) is None]
-    if missing or not config.getoption("resource_name"):
-        raise pytest.UsageError("Hardware tests require " + ", ".join(missing or ["--resource-name"]))
+    target_names = ("resource_name", "wavelength", "scan_wavelength", "grating", "turret", "filter_position")
     for name in ("timeout", "grating", "turret", "filter_position", "home_filter_position", "home_repetitions", "filter_home_timeout_ms"):
         value = config.getoption(name)
         if value is not None and value <= 0:
@@ -105,7 +105,7 @@ def pytest_configure(config: pytest.Config) -> None:
         options[key] = decoded
     _discard_fixed_options(options)
     config.stash[_OPTIONS] = HardwareOptions(
-        **{name: config.getoption(name) for name in required},
+        **{name: config.getoption(name) for name in target_names},
         visa_backend=config.getoption("visa_backend"), timeout=config.getoption("timeout"),
         scan_speed=config.getoption("scan_speed"), home_filter_position=config.getoption("home_filter_position"),
         home_repetitions=config.getoption("home_repetitions"),
@@ -114,8 +114,8 @@ def pytest_configure(config: pytest.Config) -> None:
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
-    if not config.getoption("--run-hardware"):
-        skip = pytest.mark.skip(reason="Real hardware requires --run-hardware and explicit connection/target options")
+    if config.getoption("resource_name") is None:
+        skip = pytest.mark.skip(reason="Real hardware requires --resource-name")
         for item in items:
             if item.get_closest_marker("hardware"):
                 item.add_marker(skip)
@@ -150,7 +150,7 @@ def pytest_terminal_summary(terminalreporter: Any) -> None:
 
 @pytest.fixture
 def hardware_options(pytestconfig: pytest.Config) -> HardwareOptions:
-    if not pytestconfig.getoption("--run-hardware"):
+    if pytestconfig.getoption("resource_name") is None:
         pytest.skip("Hardware access is explicitly disabled")
     return pytestconfig.stash[_OPTIONS]
 

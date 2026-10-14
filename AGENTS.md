@@ -31,7 +31,8 @@ project environment and install the package in editable mode:
 uv sync --locked
 ```
 
-Runtime dependencies are `pyvisa` and `pyvisa-py`. Hardware access also needs a
+Runtime dependencies are `pyvisa` and `pyvisa-py[serial]`; the serial extra
+installs PySerial. Hardware access also needs a
 working VISA backend and the dependencies appropriate to the connection type.
 The package requires Python >=3.10. Preserve that minimum when changing syntax
 or dependencies. Use `uv run` for project commands, `uv add`/`uv remove` for
@@ -50,7 +51,7 @@ locked development dependency. Keep test configuration in pyproject.toml:
 - `tests/conftest.py`: shared fixtures and pytest plugin registration.
 - `tests/hardware.py`: pytest hardware options, guarded fixtures, restoration, and
   timing reports. `tests/test_hardware.py` contains the hardware tests, marked
-  `hardware` and skipped unless --run-hardware is explicitly passed.
+  `hardware` and skipped unless --resource-name is supplied.
 - `tests/test_hardware_runner.py`: isolated pytest sessions using fake resources
   to verify collection gating, option validation, failures, cleanup, and timing.
 - `tests/test_cli.py`: example argument validation, dispatch, and cleanup with
@@ -82,8 +83,10 @@ resource/resource manager to check the hardware driver's commands, parsing,
 timeouts, and cleanup. Simulator checks alone do not validate the wire protocol.
 For packaging checks, run `uv build`; build outputs are ignored by Git.
 The real-hardware suite is invoked with
-`uv run pytest tests/test_hardware.py --run-hardware` and
-explicit resource, wavelength, grating, turret, and filter arguments (see README).
+`uv run pytest tests/test_hardware.py --resource-name <VISA-name>`.
+Hardware defaults select grating 1 and turret 1. Wavelength, scan speed, grating,
+turret, and filter settings have optional CLI overrides documented in
+tests/test_hardware.py; keep these details out of README.
 It exercises all public commands and attempts state restoration after each test.
 Use `-k test_turret_information` to isolate the reinstated `?TURRETS` command.
 Do not skip its failures merely because that command previously had firmware issues.
