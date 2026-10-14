@@ -43,23 +43,21 @@ Use setuptools as the build backend; do not introduce Hatchling.
 Tests use native pytest functions, fixtures, and parametrisation. Pytest is a
 locked development dependency. Keep test configuration in pyproject.toml:
 
-- `tests/test_virtual.py`: simulator state, lifecycle, and simulated experiments.
-- `tests/contract.py` and `tests/test_contract.py`: shared command behavior for the
-  simulator and fake-backed driver, plus public signature/property parity.
-- `tests/test_commands.py` and `tests/test_connection.py`: exact VISA commands,
-  parsing, configuration, ownership, timeouts, and failure cleanup.
-- `tests/conftest.py`: shared fixtures and pytest plugin registration.
-- `tests/hardware.py`: pytest hardware options, guarded fixtures, restoration, and
-  timing reports. `tests/test_hardware.py` contains the hardware tests, marked
-  `hardware` and skipped unless --resource-name is supplied.
-- `tests/test_hardware_runner.py`: isolated pytest sessions using fake resources
-  to verify collection gating, option validation, failures, cleanup, and timing.
-- `tests/test_cli.py`: example argument validation, dispatch, and cleanup with
-  the simulator and fake hardware resources.
-- `tests/test_numeric_validation.py`: finite numeric inputs, positive rounded
-  scan speeds, state preservation, and invalid hardware scan-speed readback.
-- `tests/test_timeouts.py`: configurable operation allowances, scan buffers,
-  preservation of longer/infinite timeouts, and restoration failures.
+- `tests/test_api.py`: public signatures, shared numeric validation and precision,
+  disconnected behavior, fixed-option parity, and commands imported from the
+  reusable `tests/contract.py` contract for simulator/fake/hardware coverage.
+- `tests/test_driver.py`: fake-backed connection setup, ownership, cleanup, exact
+  wire commands, parsing, timeouts, and invalid device readback.
+- `tests/test_virtual.py`: simulator state, lifecycle, backend independence, and
+  simulated experiments.
+- `tests/test_cli.py`: example argument validation, dispatch, and cleanup.
+- `tests/test_hardware.py`: real command contract and homing timings; skipped
+  unless --resource-name is supplied. Optional settings are documented there.
+- `tests/hardware_plugin.py`: hardware options, guarded fixtures, state restoration,
+  and timing reports. `tests/test_hardware_plugin.py` tests it in isolated pytest
+  sessions with fake resources, including gating, errors, cleanup, and timing.
+- `tests/conftest.py`: shared fixtures and plugin registration.
+- `tests/fakes.py`: VISA resources and manager doubles used without hardware.
 
 Run the default suite without hardware:
 
@@ -99,6 +97,11 @@ Homing positions and repeats have individual parametrised node IDs. Use
 --visa-backend=@py (equals sign); pytest treats standalone @py as an argument
 file. Hardware tests must run sequentially; parallel worker execution is rejected.
 Neither default runs nor --collect-only may contact hardware.
+Before the first real hardware test session, remind the user to inspect and save
+raw `?GRATINGS` and `?TURRETS` responses, including formatting and terminators.
+Use those captures with the manual to determine a justified maximum response
+length. Keep the manual reader's existing per-character resource timeout; do
+not introduce an overall deadline or guessed response-size limit.
 
 ## Change conventions
 

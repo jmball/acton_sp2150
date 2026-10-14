@@ -32,7 +32,9 @@ def test_scanned_wavelength(instrument, targets):
     instrument.wavelength = targets.wavelength
     instrument.scan_speed = targets.scan_speed
     instrument.scan_to_wavelength(str(targets.scan_wavelength))
-    assert instrument.wavelength == pytest.approx(targets.scan_wavelength, abs=0.11, rel=0)
+    assert instrument.wavelength == pytest.approx(
+        targets.scan_wavelength, abs=0.11, rel=0
+    )
 
 
 def test_grating(instrument, targets):

@@ -7,7 +7,7 @@ from virtual_sp2150 import sp2150 as virtual_sp2150
 from tests.fakes import FakeSerial, make_manager
 from tests.contract import ContractTargets
 
-pytest_plugins = ["tests.hardware", "pytester"]
+pytest_plugins = ["tests.hardware_plugin", "pytester"]
 
 
 @pytest.fixture
@@ -31,6 +31,7 @@ def unconnected_driver():
 def connect(unconnected_driver, manager):
     def connect_device(**options):
         unconnected_driver.connect("serial-alias", resource_manager=manager, **options)
+
     return connect_device
 
 
@@ -52,22 +53,11 @@ def virtual_device():
 
 @pytest.fixture(params=["virtual", "fake"])
 def instrument(request):
-    return request.getfixturevalue("virtual_device" if request.param == "virtual" else "connected_driver")
+    return request.getfixturevalue(
+        "virtual_device" if request.param == "virtual" else "connected_driver"
+    )
 
 
 @pytest.fixture
 def targets():
     return ContractTargets()
-
-
-@pytest.fixture
-def observed(connected_driver, resource):
-    observations = []
-    original_query = resource.query
-
-    def query(command):
-        observations.append((command, resource.timeout))
-        return original_query(command)
-
-    resource.query = query
-    return observations
