@@ -40,14 +40,6 @@ def _finite_number(value: Number, name: str) -> float:
     return result
 
 
-def _scan_speed_value(speed: Number) -> float:
-    """Validate scan speed after rounding to device precision (nm/min)."""
-    result = float(f"{_finite_number(speed, 'Scan speed'):.1f}")
-    if result <= 0:
-        raise ValueError("Scan speed must be positive at the device's one-decimal precision")
-    return result
-
-
 def _discard_fixed_options(options: dict[str, Any]) -> None:
     """Warn and discard overrides, including matching device defaults."""
     fixed = _FIXED_OPTIONS.intersection(options)
@@ -61,10 +53,11 @@ def _discard_fixed_options(options: dict[str, Any]) -> None:
         )
 
 
-class _OperationTimeouts:
-    """Configurable operation allowances in ms, shared with the simulator."""
+class sp2150:
+    """Monochromator instrument object."""
 
     def __init__(self) -> None:
+        """Construct object."""
         # GRATING takes about 20 s; allow additional time for communication.
         self.grating_timeout_ms: float = 30000.0
         # FILTER takes 2.5 s per adjacent position (up to three steps).
@@ -72,14 +65,6 @@ class _OperationTimeouts:
         # FHOME has no documented duration; allow a full revolution plus margin.
         self.filter_home_timeout_ms: float = 20000.0
         self.scan_timeout_buffer_ms: float = 5000.0
-
-
-class sp2150(_OperationTimeouts):
-    """Monochromator instrument object."""
-
-    def __init__(self) -> None:
-        """Construct object."""
-        super().__init__()
         self._instr: MessageBasedResource | None = None
 
     def __enter__(self) -> sp2150:
@@ -285,7 +270,10 @@ class sp2150(_OperationTimeouts):
         ValueError
             Speed is nonfinite or is not positive after rounding to one decimal.
         """
-        self._query(f"{_scan_speed_value(speed):.1f} NM/MIN")
+        speed = round(_finite_number(speed, "Scan speed"), 1)
+        if speed <= 0:
+            raise ValueError("Scan speed must be positive at the device's one-decimal precision")
+        self._query(f"{speed:.1f} NM/MIN")
 
     def scan_to_wavelength(self, wavelength: Number) -> None:
         """Scan grating to wavelength in nm.

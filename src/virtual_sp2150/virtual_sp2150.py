@@ -7,17 +7,19 @@ from typing import Any
 
 import pyvisa
 from sp2150.sp2150 import (
-    Integer, Number, _NOT_CONNECTED, _OperationTimeouts, _discard_fixed_options, _finite_number,
-    _scan_speed_value,
+    Integer, Number, _NOT_CONNECTED, _discard_fixed_options, _finite_number,
 )
 
 
-class sp2150(_OperationTimeouts):
+class sp2150:
     """Monochromator instrument object."""
 
     def __init__(self) -> None:
         """Initialise with dummy parameters."""
-        super().__init__()
+        self.grating_timeout_ms: float = 30000.0
+        self.filter_timeout_ms: float = 10000.0
+        self.filter_home_timeout_ms: float = 20000.0
+        self.scan_timeout_buffer_ms: float = 5000.0
         self._scan_speed = 1000.0
         self._wavelength = 0.0
         self._grating = 1
@@ -88,7 +90,10 @@ class sp2150(_OperationTimeouts):
     def scan_speed(self, speed: Number) -> None:
         """Set finite scan speed in nm/min, positive after one-decimal rounding."""
         self._check_connection()
-        self._scan_speed = _scan_speed_value(speed)
+        speed = round(_finite_number(speed, "Scan speed"), 1)
+        if speed <= 0:
+            raise ValueError("Scan speed must be positive at the device's one-decimal precision")
+        self._scan_speed = speed
 
     def scan_to_wavelength(self, wavelength: Number) -> None:
         """Scan grating to a finite wavelength in nm."""
