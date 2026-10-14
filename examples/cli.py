@@ -32,7 +32,19 @@ _SETTERS = {
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Validate arguments before connecting, execute a command, and disconnect."""
+    """Validate arguments, run one instrument command, and disconnect.
+
+    Parameters
+    ----------
+    argv : sequence of str or None, optional
+        Command-line arguments without the program name. None uses
+        sys.argv[1:].
+
+    Returns
+    -------
+    int
+        Zero after successful command execution.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--virtual", action="store_true", help="Use the simulator")
     parser.add_argument("-n", "--resource-name", help="VISA resource name (required for hardware)")

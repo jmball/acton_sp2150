@@ -101,6 +101,10 @@ Neither default runs nor --collect-only may contact hardware.
 
 - Follow the existing four-space indentation, property-based API, and NumPy-style
   parameter/return docstrings. Document units explicitly.
+  Include Parameters for arguments other than self/cls and Returns for meaningful
+  return values; omit empty sections for methods returning None. Use Yields for
+  generators and Attributes for configurable instance fields. Do not use Raises
+  sections. Prefer concise descriptive prose over Notes headings.
 - Preserve public imports, method signatures, and context-manager behavior
   unless the requested change requires an API change.
 - For shared API changes, review the hardware driver, simulator, and example CLI

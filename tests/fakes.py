@@ -6,7 +6,19 @@ from unittest.mock import Mock
 
 
 def make_manager(resource):
-    """Mock opening a resource and applying the supplied valid options."""
+    """Mock opening a resource and applying its connection options.
+
+    Parameters
+    ----------
+    resource : pyvisa.resources.Resource
+        Fake resource returned by the manager.
+
+    Returns
+    -------
+    unittest.mock.Mock
+        Manager whose open_resource applies keyword options to the
+        supplied resource.
+    """
     manager = Mock()
 
     def open_resource(resource_name, access_mode=0, open_timeout=0, **options):

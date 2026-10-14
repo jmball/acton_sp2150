@@ -165,7 +165,16 @@ def hardware_manager(hardware_options: HardwareOptions):
 
 
 def restore_state(device: sp2150, initial_state: dict[str, Any]) -> None:
-    """Attempt every restoration and report failures during pytest teardown."""
+    """Attempt every state restoration during pytest teardown.
+
+    Parameters
+    ----------
+    device : sp2150
+        Connected hardware driver whose state is to be restored.
+    initial_state : dict of str to object
+        Previously recorded property values, restored in dictionary order.
+        Attempt all properties even if an earlier restoration fails.
+    """
     failures = []
     for name, value in initial_state.items():
         try:

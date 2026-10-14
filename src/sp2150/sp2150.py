@@ -33,7 +33,20 @@ _FIXED_OPTIONS = frozenset({
 
 
 def _finite_number(value: Number, name: str) -> float:
-    """Convert a numeric input, rejecting NaN and infinity."""
+    """Convert a numeric input, rejecting NaN and infinity.
+
+    Parameters
+    ----------
+    value : float or str
+        Value to convert to a finite float.
+    name : str
+        Value name used in the validation error message.
+
+    Returns
+    -------
+    float
+        The converted finite value.
+    """
     result = float(value)
     if not math.isfinite(result):
         raise ValueError(f"{name} must be finite")
@@ -41,7 +54,14 @@ def _finite_number(value: Number, name: str) -> float:
 
 
 def _discard_fixed_options(options: dict[str, Any]) -> None:
-    """Warn and discard overrides, including matching device defaults."""
+    """Warn and remove caller overrides of fixed device settings.
+
+    Parameters
+    ----------
+    options : dict of str to object
+        Resource options to modify in place. Fixed settings are removed
+        even when supplied values match the device defaults.
+    """
     fixed = _FIXED_OPTIONS.intersection(options)
     if fixed:
         for name in fixed:
@@ -54,10 +74,26 @@ def _discard_fixed_options(options: dict[str, Any]) -> None:
 
 
 class sp2150:
-    """Monochromator instrument object."""
+    """Control an Acton SP-2150 monochromator and FA-2448 filter wheel.
+
+    Connect before using instrument commands. Operation allowances extend
+    the resource timeout when needed and restore it afterward. A longer
+    or infinite caller timeout is preserved.
+
+    Attributes
+    ----------
+    grating_timeout_ms : float
+        Minimum grating-selection timeout in ms. Default is 30000.
+    filter_timeout_ms : float
+        Minimum filter-selection timeout in ms. Default is 10000.
+    filter_home_timeout_ms : float
+        Minimum filter-homing timeout in ms. Default is 20000.
+    scan_timeout_buffer_ms : float
+        Buffer added to the estimated scan duration in ms. Default is 5000.
+    """
 
     def __init__(self) -> None:
-        """Construct object."""
+        """Create a disconnected instrument with default timeouts."""
         # GRATING takes about 20 s; allow additional time for communication.
         self.grating_timeout_ms: float = 30000.0
         # FILTER takes 2.5 s per adjacent position (up to three steps).
@@ -68,7 +104,13 @@ class sp2150:
         self._instr: MessageBasedResource | None = None
 
     def __enter__(self) -> sp2150:
-        """Enter the runtime context related to this object."""
+        """Return this instance for use as a context manager.
+
+        Returns
+        -------
+        sp2150
+            This instrument instance; entering the context does not connect it.
+        """
         return self
 
     def __exit__(
@@ -77,7 +119,20 @@ class sp2150:
         exc_value: BaseException | None,
         traceback: TracebackType | None,
     ) -> None:
-        """Exit the runtime context related to this object."""
+        """Disconnect when leaving the context.
+
+        If the context body failed, preserve its exception and log any
+        additional disconnection failure.
+
+        Parameters
+        ----------
+        exc_type : type or None
+            Exception type from the context body, or None on normal exit.
+        exc_value : BaseException or None
+            Exception from the context body, or None on normal exit.
+        traceback : types.TracebackType or None
+            Traceback from the context body, or None on normal exit.
+        """
         try:
             self.disconnect()
         except Exception:
@@ -92,38 +147,29 @@ class sp2150:
         resource_manager: pyvisa.ResourceManager | None = None,
         **resource_kwargs: Any,
     ) -> None:
-        """Connect to the instrument.
+        """Connect to a message-based VISA instrument.
+
+        Disconnect before reconnecting. The driver fixes ASCII encoding and
+        termination strings; RS232 uses 9600 baud, 8 data bits, no parity, one
+        stop bit, and no flow control.
+
+        If configuration or initialization fails after opening the resource,
+        close the session and leave this instance disconnected. Failures
+        inside PyVISA open_resource are handled by PyVISA.
 
         Parameters
         ----------
         resource_name : str
-            Full VISA resource name, e.g. "ASRL2::INSTR", "GPIB0::14::INSTR" etc. See
-            https://pyvisa.readthedocs.io/en/latest/introduction/names.html for more
-            info on correct formatting for resource names.
-        resource_manager : pyvisa.ResourceManager, optional
-            Resource manager used to create new connection. If `None`, create a new
-            resource manager using the default VISA backend. Managers are shared
-            by PyVISA: the instrument resource retains the manager, and this driver
-            never closes it.
-        resource_kwargs : dict
-            Options forwarded to PyVISA open_resource for validation and application
-            (e.g. timeout in ms, query_delay in seconds, access_mode). Device
-            termination, ASCII encoding, serial settings, and resource class
-            overrides are discarded with a UserWarning.
-
-        Raises
-        ------
-        RuntimeError
-            Already connected. Disconnect explicitly before reconnecting.
-        TypeError
-            A resource that is not message-based.
-
-        Notes
-        -----
-        Serial resources are configured for 9600 baud, 8 data bits, no parity,
-        one stop bit, and no flow control. The driver owns only the instrument
-        session. Failures after open_resource returns close the session and leave
-        this object disconnected. Failures inside open_resource use PyVISA cleanup.
+            VISA resource name or alias, such as "ASRL2::INSTR" or
+            "GPIB0::14::INSTR".
+        resource_manager : pyvisa.ResourceManager or None, optional
+            Manager used to open the resource. None selects the default VISA
+            backend. The driver closes only its instrument session; the
+            PyVISA resource retains the manager.
+        **resource_kwargs
+            Options forwarded to PyVISA open_resource, such as timeout in ms,
+            query_delay in seconds, or access_mode. Overrides of fixed device
+            settings and resource class selection warn and are ignored.
         """
         if self._instr is not None:
             raise RuntimeError("Already connected; disconnect before reconnecting")
@@ -158,8 +204,8 @@ class sp2150:
     def disconnect(self) -> None:
         """Close this instrument session; repeated calls are harmless.
 
-        The manager remains open because PyVISA may share it with other callers.
-        State is cleared even if closing the instrument raises an exception.
+        The resource manager remains open because PyVISA may share it with
+        other callers. Connection state is cleared even if closing fails.
         """
         instr = self._instr
         self._instr = None
@@ -167,26 +213,69 @@ class sp2150:
             instr.close()
 
     def _write(self, cmd: str) -> None:
-        """Send a command, requiring an active connection."""
+        """Send a command over the active connection.
+
+        Parameters
+        ----------
+        cmd : str
+            Device command without its write termination.
+        """
         if self._instr is None:
             raise RuntimeError(_NOT_CONNECTED)
         self._instr.write(cmd)
 
     def _query(self, cmd: str) -> str:
-        """Send a command and return the unparsed PyVISA response."""
+        """Send a command and read its response over the active connection.
+
+        Parameters
+        ----------
+        cmd : str
+            Device command without its write termination.
+
+        Returns
+        -------
+        str
+            The unparsed PyVISA response, with read termination removed.
+        """
         if self._instr is None:
             raise RuntimeError(_NOT_CONNECTED)
         return self._instr.query(cmd)
 
     def _read_bytes(self, count: int) -> bytes:
-        """Read bytes, requiring an active connection."""
+        """Read bytes over the active connection.
+
+        Parameters
+        ----------
+        count : int
+            Number of bytes to read.
+
+        Returns
+        -------
+        bytes
+            The bytes read from the instrument.
+        """
         if self._instr is None:
             raise RuntimeError(_NOT_CONNECTED)
         return self._instr.read_bytes(count)
 
     @contextmanager
     def _extended_timeout(self, minimum_ms: float) -> Iterator[None]:
-        """Temporarily extend the VISA timeout, preserving a longer caller timeout."""
+        """Temporarily extend the VISA timeout for an operation.
+
+        Preserve a longer or infinite caller timeout. Restore the previous
+        timeout on exit; if restoration fails during another exception, log
+        the restoration failure and preserve the original exception.
+
+        Parameters
+        ----------
+        minimum_ms : float
+            Finite, nonnegative minimum timeout in ms.
+
+        Yields
+        ------
+        None
+            Control to the operation using the temporary timeout.
+        """
         instr = self._instr
         if instr is None:
             raise RuntimeError(_NOT_CONNECTED)
@@ -210,43 +299,37 @@ class sp2150:
             instr.timeout = old_timeout
 
     def _query_value(self, cmd: str) -> str:
-        """Query a command, stripping space at beginning of the response and the unit.
-
-        When echo is disabled, the first character returned is a superfluous space,
-        which can be removed.
-
-        Some responses always contain a unit. This is also stripped so properties have
-        values with the correct numeric type. The unit of a property can be found in
-        its docstring.
+        """Query the first response value without its leading space or unit.
 
         Parameters
         ----------
         cmd : str
-            Command to query.
+            Device command without its write termination.
 
         Returns
         -------
-        resp : str
-            Response to command with receding space and unit stripped.
+        str
+            The first response value as text; numeric conversion is left to
+            the caller.
         """
         return self._query(cmd)[1:].split(" ")[0]
 
     def _query_manual(self, cmd: str) -> str:
-        """Query a command manually looking for the termination character.
+        """Read a command response until the complete device terminator.
 
-        Some commands return partial termination characters, which pyvisa doesn't
-        handle properly. This can be circumvented by reading characters one at a
-        time and manually checking for the termination character.
+        Read one byte at a time so partial termination sequences inside
+        information responses do not end the read.
 
         Parameters
         ----------
         cmd : str
-            Command to query.
+            Device command without its write termination.
 
         Returns
         -------
-        resp : str
-            Response to command with receding space and unit stripped.
+        str
+            ASCII response text without the terminator or outer whitespace.
+            Internal line breaks and units are preserved.
         """
         resp = b""
         self._write(cmd)
@@ -258,17 +341,24 @@ class sp2150:
 
     @property
     def scan_speed(self) -> float:
-        """Get grating scan speed in nm/min."""
+        """Get the grating scan speed.
+
+        Returns
+        -------
+        float
+            Scan speed in nm/min.
+        """
         return float(self._query_value("?NM/MIN"))
 
     @scan_speed.setter
     def scan_speed(self, speed: Number) -> None:
-        """Set grating scan speed in nm/min.
+        """Set the grating scan speed.
 
-        Raises
-        ------
-        ValueError
-            Speed is nonfinite or is not positive after rounding to one decimal.
+        Parameters
+        ----------
+        speed : float or str
+            Finite scan speed in nm/min. Rounded to one decimal place;
+            the rounded value must be positive.
         """
         speed = round(_finite_number(speed, "Scan speed"), 1)
         if speed <= 0:
@@ -276,13 +366,16 @@ class sp2150:
         self._query(f"{speed:.1f} NM/MIN")
 
     def scan_to_wavelength(self, wavelength: Number) -> None:
-        """Scan grating to wavelength in nm.
+        """Scan the grating to a target wavelength.
 
-        Raises
-        ------
-        ValueError
-            Target is nonfinite, or the reported scan speed is nonfinite or
-            nonpositive.
+        Estimate duration from the current wavelength and finite, positive
+        scan speed. Temporarily extend the timeout using that duration plus
+        `scan_timeout_buffer_ms`, then restore the previous timeout.
+
+        Parameters
+        ----------
+        wavelength : float or str
+            Finite target wavelength in nm, rounded to one decimal place.
         """
         instr = self._instr
         if instr is None:
@@ -303,65 +396,128 @@ class sp2150:
 
     @property
     def wavelength(self) -> float:
-        """Get current grating wavelength position in nm."""
+        """Get the current wavelength.
+
+        Returns
+        -------
+        float
+            Wavelength in nm.
+        """
         return float(self._query_value("?NM"))
 
     @wavelength.setter
     def wavelength(self, wavelength: Number) -> None:
-        """Set grating position for wavelength in nm.
+        """Position the grating at a wavelength.
 
-        Raises
-        ------
-        ValueError
-            Wavelength is nonfinite.
+        Parameters
+        ----------
+        wavelength : float or str
+            Finite target wavelength in nm, rounded to one decimal place.
         """
         self._query(f"{_finite_number(wavelength, 'Wavelength'):.1f} GOTO")
 
     @property
     def grating(self) -> int:
-        """Get grating number."""
+        """Get the selected grating number.
+
+        Returns
+        -------
+        int
+            Grating number on the active turret.
+        """
         return int(self._query_value("?GRATING"))
 
     @grating.setter
     def grating(self, grating: Integer) -> None:
-        """Set grating number, allowing grating_timeout_ms for indexing."""
+        """Select a grating on the active turret.
+
+        Temporarily extend the timeout using `grating_timeout_ms`.
+
+        Parameters
+        ----------
+        grating : int or str
+            Grating number, converted to an integer.
+        """
         command = f"{int(grating)} GRATING"
         with self._extended_timeout(self.grating_timeout_ms):
             self._query(command)
 
     @property
     def turret(self) -> int:
-        """Get turret number."""
+        """Get the selected turret number.
+
+        Returns
+        -------
+        int
+            Turret number.
+        """
         return int(self._query_value("?TURRET"))
 
     @turret.setter
     def turret(self, turret: Integer) -> None:
-        """Set turrent number."""
+        """Select the turret parameters.
+
+        Parameters
+        ----------
+        turret : int or str
+            Turret number, converted to an integer.
+        """
         self._query(f"{int(turret)} TURRET")
 
     @property
     def grating_info(self) -> str:
-        """Get groove spacing and blaze wavelength of each grating."""
+        """Get the grating information.
+
+        Returns
+        -------
+        str
+            Text describing groove spacing and blaze wavelength for each
+            grating. Internal line breaks are preserved.
+        """
         return self._query_manual("?GRATINGS")
 
     @property
     def turret_info(self) -> str:
-        """Get groove spacing of each grating on each turret."""
+        """Get the turret information.
+
+        Returns
+        -------
+        str
+            Text describing grating groove spacing for each turret.
+            Internal line breaks are preserved.
+        """
         return self._query_manual("?TURRETS")
 
     @property
     def filter(self) -> int:
-        """Get filter wheel position number."""
+        """Get the filter wheel position.
+
+        Returns
+        -------
+        int
+            Filter position number.
+        """
         return int(self._query_value("?FILTER"))
 
     @filter.setter
     def filter(self, filter_pos: Integer) -> None:
-        """Set filter wheel position, allowing filter_timeout_ms for movement."""
+        """Select a filter wheel position.
+
+        Temporarily extend the timeout using `filter_timeout_ms`.
+
+        Parameters
+        ----------
+        filter_pos : int or str
+            Filter position number, converted to an integer.
+        """
         command = f"{int(filter_pos)} FILTER"
         with self._extended_timeout(self.filter_timeout_ms):
             self._query(command)
 
     def home_filter(self) -> None:
-        """Home the filter wheel, allowing filter_home_timeout_ms for movement."""
+        """Home the filter wheel to its first position.
+
+        Temporarily extend the timeout using `filter_home_timeout_ms`.
+        """
         with self._extended_timeout(self.filter_home_timeout_ms):
             self._query("FHOME")

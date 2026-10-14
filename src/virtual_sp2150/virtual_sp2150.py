@@ -1,4 +1,4 @@
-"""Acton SP2150 monochromator control library."""
+"""In-memory simulation of an Acton SP-2150 monochromator."""
 
 from __future__ import annotations
 
@@ -12,10 +12,26 @@ from sp2150.sp2150 import (
 
 
 class sp2150:
-    """Monochromator instrument object."""
+    """Simulate an Acton SP-2150 monochromator and FA-2448 filter wheel.
+
+    Connect before using instrument commands. Operations update memory
+    immediately. Timeout attributes are accepted for API compatibility
+    and do not affect simulation timing.
+
+    Attributes
+    ----------
+    grating_timeout_ms : float
+        Minimum grating-selection timeout in ms. Default is 30000.
+    filter_timeout_ms : float
+        Minimum filter-selection timeout in ms. Default is 10000.
+    filter_home_timeout_ms : float
+        Minimum filter-homing timeout in ms. Default is 20000.
+    scan_timeout_buffer_ms : float
+        Buffer added to the estimated scan duration in ms. Default is 5000.
+    """
 
     def __init__(self) -> None:
-        """Initialise with dummy parameters."""
+        """Create a disconnected simulator with default instrument state."""
         self.grating_timeout_ms: float = 30000.0
         self.filter_timeout_ms: float = 10000.0
         self.filter_home_timeout_ms: float = 20000.0
@@ -32,7 +48,13 @@ class sp2150:
         self._connected = False
 
     def __enter__(self) -> sp2150:
-        """Enter the runtime context related to this object."""
+        """Return this instance for use as a context manager.
+
+        Returns
+        -------
+        sp2150
+            This instrument instance; entering the context does not connect it.
+        """
         return self
 
     def __exit__(
@@ -41,7 +63,17 @@ class sp2150:
         exc_value: BaseException | None,
         traceback: TracebackType | None,
     ) -> None:
-        """Exit the runtime context related to this object."""
+        """Disconnect when leaving the context.
+
+        Parameters
+        ----------
+        exc_type : type or None
+            Exception type from the context body, or None on normal exit.
+        exc_value : BaseException or None
+            Exception from the context body, or None on normal exit.
+        traceback : types.TracebackType or None
+            Traceback from the context body, or None on normal exit.
+        """
         self.disconnect()
 
     def connect(
@@ -51,20 +83,22 @@ class sp2150:
         resource_manager: pyvisa.ResourceManager | None = None,
         **resource_kwargs: Any,
     ) -> None:
-        """Connect to the instrument.
+        """Connect the simulated instrument without contacting hardware.
+
+        Disconnect before reconnecting. Instrument state persists across
+        disconnection and reconnection.
 
         Parameters
         ----------
         resource_name : str
-            Full VISA resource name, e.g. "ASRL2::INSTR", "GPIB0::14::INSTR" etc. See
-            https://pyvisa.readthedocs.io/en/latest/introduction/names.html for more
-            info on correct formatting for resource names.
-        resource_manager : pyvisa.ResourceManager, optional
-            Accepted for API compatibility. Never used or closed by the simulator.
-        resource_kwargs : dict
-            Accepted and ignored without contacting a VISA backend. Fixed device
-            settings and resource class overrides warn like the driver;
-            other options are not validated by the simulator.
+            Resource name accepted for compatibility with the hardware driver.
+            The simulator does not interpret it.
+        resource_manager : pyvisa.ResourceManager or None, optional
+            Accepted for API compatibility; never used or closed.
+        **resource_kwargs
+            Accepted without opening a VISA backend. Fixed device settings
+            and resource class overrides warn and are ignored, as in the
+            driver. Other options are ignored without backend validation.
         """
         if self._connected:
             raise RuntimeError("Already connected; disconnect before reconnecting")
@@ -72,23 +106,39 @@ class sp2150:
         self._connected = True
 
     def disconnect(self) -> None:
-        """Disconnect instrument."""
+        """Disconnect the simulated instrument; repeated calls are harmless.
+
+        Instrument state is preserved for the next connection.
+        """
         self._connected = False
 
     def _check_connection(self) -> None:
-        """Require the same connection state as the hardware driver."""
+        """Check that the simulated instrument is connected."""
         if not self._connected:
             raise RuntimeError(_NOT_CONNECTED)
 
     @property
     def scan_speed(self) -> float:
-        """Get grating scan speed in nm/min."""
+        """Get the grating scan speed.
+
+        Returns
+        -------
+        float
+            Scan speed in nm/min.
+        """
         self._check_connection()
         return self._scan_speed
 
     @scan_speed.setter
     def scan_speed(self, speed: Number) -> None:
-        """Set finite scan speed in nm/min, positive after one-decimal rounding."""
+        """Set the grating scan speed.
+
+        Parameters
+        ----------
+        speed : float or str
+            Finite scan speed in nm/min. Rounded to one decimal place;
+            the rounded value must be positive.
+        """
         self._check_connection()
         speed = round(_finite_number(speed, "Scan speed"), 1)
         if speed <= 0:
@@ -96,70 +146,138 @@ class sp2150:
         self._scan_speed = speed
 
     def scan_to_wavelength(self, wavelength: Number) -> None:
-        """Scan grating to a finite wavelength in nm."""
+        """Simulate a scan to a target wavelength.
+
+        Update the wavelength immediately without simulating movement time.
+
+        Parameters
+        ----------
+        wavelength : float or str
+            Finite target wavelength in nm, rounded to one decimal place.
+        """
         self.wavelength = wavelength
 
     @property
     def wavelength(self) -> float:
-        """Get current grating wavelength position in nm."""
+        """Get the current wavelength.
+
+        Returns
+        -------
+        float
+            Wavelength in nm.
+        """
         self._check_connection()
         return self._wavelength
 
     @wavelength.setter
     def wavelength(self, wavelength: Number) -> None:
-        """Set grating position to a finite wavelength in nm."""
+        """Position the grating at a wavelength.
+
+        Parameters
+        ----------
+        wavelength : float or str
+            Finite target wavelength in nm, rounded to one decimal place.
+        """
         self._check_connection()
         self._wavelength = float(f"{_finite_number(wavelength, 'Wavelength'):.1f}")
 
     @property
     def grating(self) -> int:
-        """Get grating number."""
+        """Get the selected grating number.
+
+        Returns
+        -------
+        int
+            Grating number on the active turret.
+        """
         self._check_connection()
         return self._grating
 
     @grating.setter
     def grating(self, grating: Integer) -> None:
-        """Set grating number."""
+        """Select a grating on the active turret.
+
+        Parameters
+        ----------
+        grating : int or str
+            Grating number, converted to an integer.
+        """
         self._check_connection()
         self._grating = int(grating)
 
     @property
     def turret(self) -> int:
-        """Get turret number."""
+        """Get the selected turret number.
+
+        Returns
+        -------
+        int
+            Turret number.
+        """
         self._check_connection()
         return self._turret
 
     @turret.setter
     def turret(self, turret: Integer) -> None:
-        """Set turrent number."""
+        """Select the turret parameters.
+
+        Parameters
+        ----------
+        turret : int or str
+            Turret number, converted to an integer.
+        """
         self._check_connection()
         self._turret = int(turret)
 
     @property
     def grating_info(self) -> str:
-        """Get groove spacing and blaze wavelength of each grating."""
+        """Get simulated grating information.
+
+        Returns
+        -------
+        str
+            Placeholder grating information text.
+        """
         self._check_connection()
         return self._grating_info
 
     @property
     def turret_info(self) -> str:
-        """Get groove spacing of each grating on each turret."""
+        """Get simulated turret information.
+
+        Returns
+        -------
+        str
+            Placeholder turret information text.
+        """
         self._check_connection()
         return self._turret_info
 
     @property
     def filter(self) -> int:
-        """Get filter wheel position number."""
+        """Get the filter wheel position.
+
+        Returns
+        -------
+        int
+            Filter position number.
+        """
         self._check_connection()
         return self._filter
 
     @filter.setter
     def filter(self, filter_pos: Integer) -> None:
-        """Set filter wheel position number."""
+        """Select a filter wheel position.
+
+        Parameters
+        ----------
+        filter_pos : int or str
+            Filter position number, converted to an integer.
+        """
         self._check_connection()
         self._filter = int(filter_pos)
 
     def home_filter(self) -> None:
-        """Set filter wheel to home position."""
+        """Home the filter wheel to its first position."""
         self._check_connection()
         self._filter = 1
