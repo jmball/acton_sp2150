@@ -26,3 +26,13 @@ Homepage = "https://github.com/jmball/acton_sp2150"
 [tool.setuptools.packages.find]
 where = ["src"]
 namespaces = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "--strict-markers"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+]

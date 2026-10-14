@@ -31,7 +31,7 @@ the simulator can be used without connecting to an instrument.
 The command-line example uses hardware by default and requires a resource name:
 
 ```sh
-uv run python examples/cli.py --resource-name 'ASRL2::INSTR' --visa-backend '@py' get_wavelength
+uv run python examples/cli.py --resource-name 'ASRL2::INSTR' --visa-backend=@py get_wavelength
 uv run python examples/cli.py --virtual goto_wavelength --parameter 532
 uv run python examples/cli.py --help
 ```
@@ -144,14 +144,14 @@ The test suite has three complementary layers:
 Run all hardware-free tests (the default discovery never contacts hardware):
 
 ```sh
-uv run python -m unittest discover -s tests -t . -v
+uv run pytest -v
 ```
 
 Run the hardware suite explicitly with targets valid for your instrument:
 
 ```sh
-uv run python -m tests.hardware \
-  --resource-name 'ASRL2::INSTR' --visa-backend '@py' --timeout 30000 \
+uv run pytest tests/test_hardware.py --run-hardware \
+  --resource-name 'ASRL2::INSTR' --visa-backend=@py --timeout 30000 \
   --wavelength 500 --scan-wavelength 501 --scan-speed 600 \
   --turret 1 --grating 1 --filter-position 2
 ```
@@ -177,10 +177,10 @@ Timeouts, an exceeded allowance, and incorrect final positions fail the test.
 To isolate this measurement and repeat the sweep three times:
 
 ```sh
-uv run python -m tests.hardware \
-  --resource-name 'ASRL2::INSTR' --visa-backend '@py' \
+uv run pytest tests/test_hardware.py --run-hardware \
+  --resource-name 'ASRL2::INSTR' --visa-backend=@py \
   --wavelength 500 --scan-wavelength 501 --turret 1 --grating 1 \
-  --filter-position 2 --test test_home_filter_timing --home-repetitions 3
+  --filter-position 2 -k test_home_filter_timing --home-repetitions 3
 ```
 
 Use `--filter-home-timeout-ms 30000` to measure against a different allowance;
@@ -193,11 +193,23 @@ worst-case duration.
 
 `--visa-backend` can be omitted to use the system-selected backend. Backend
 dependencies must be installed; for serial communication with `@py`, include
-pyserial with `uv run --with pyserial python -m tests.hardware ...`.
+pyserial with `uv run --with pyserial pytest tests/test_hardware.py --run-hardware ...`.
+Use `--visa-backend=@py` with the equals sign: pytest treats a standalone `@py`
+argument as an argument-file path.
 
-Add `--test test_turret_information` to the complete command above to isolate
-`?TURRETS`, or repeat `--test` to select multiple tests. An unsupported command
-is reported as an ordinary failure/error, so the hardware result remains visible.
-Run `uv run python -m tests.hardware --help` for all CLI options. Tests have been
-validated against fake resources; actual hardware results depend on the connected
-instrument and its firmware.
+Add `-k test_turret_information` to the complete command above to isolate
+`?TURRETS`, or use a pytest selection expression such as
+`-k 'test_turret_information or test_grating_information'`. Each homing position
+and repetition has its own node ID, for example
+`tests/test_hardware.py::test_home_filter_timing[position-6-repeat-1]`.
+Unsupported commands remain failures/errors. Run `uv run pytest --help` for
+all CLI options. The hardware fixture always requires `--run-hardware`, even
+when selecting a test by node ID. Hardware tests run sequentially; pytest-xdist
+parallel execution is rejected when hardware access is enabled.
+
+Tests use native pytest functions, fixtures, and parametrisation. Pytest is a
+locked development dependency installed by `uv sync --locked`; runtime package
+installation does not require it. Ordinary runs skip the hardware tests, and
+`--collect-only` never connects. The hardware runner itself is tested in isolated
+pytest sessions with fake VISA resources. Actual hardware timing and protocol
+results still depend on the connected instrument and firmware.

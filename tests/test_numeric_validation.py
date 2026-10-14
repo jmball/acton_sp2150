@@ -1,70 +1,50 @@
 """Reject invalid numeric commands before changing instrument state."""
 
-import unittest
-
-from sp2150 import sp2150
-from virtual_sp2150 import sp2150 as virtual_sp2150
-from tests.fakes import FakeSerial, make_manager
+import pytest
 
 
-class NumericValidationTests(unittest.TestCase):
-    def setUp(self):
-        self.resource = FakeSerial()
-        actual = sp2150()
-        actual.connect("fake", resource_manager=make_manager(self.resource))
-        simulated = virtual_sp2150()
-        simulated.connect("virtual")
-        self.devices = (actual, simulated)
-        for device in self.devices:
-            self.addCleanup(device.disconnect)
+@pytest.mark.parametrize("value", [0, -1, -0.01, 0.01, 0.049, "0", "0.01", "bad",
+                                  float("nan"), float("inf"), float("-inf"), "nan", "inf"])
+def test_invalid_scan_speed_preserves_state_and_sends_no_command(instrument, resource, value):
+    original = instrument.scan_speed
+    previous_commands = resource.commands.copy()
+    with pytest.raises(ValueError):
+        instrument.scan_speed = value
+    assert resource.commands == previous_commands
+    assert instrument.scan_speed == original
 
-    def test_invalid_scan_speed_preserves_state_and_sends_no_command(self):
-        for device in self.devices:
-            original = device.scan_speed
-            for value in (0, -1, -0.01, 0.01, 0.049, "0", "0.01", "bad",
-                          float("nan"), float("inf"), float("-inf"), "nan", "inf"):
-                with self.subTest(driver=type(device), value=value):
-                    previous_commands = self.resource.commands.copy()
-                    with self.assertRaises(ValueError):
-                        device.scan_speed = value
-                    self.assertEqual(self.resource.commands, previous_commands)
-                    self.assertEqual(device.scan_speed, original)
 
-    def test_nonfinite_wavelengths_and_scan_targets_send_no_commands(self):
-        for device in self.devices:
-            original = device.wavelength
-            for value in (float("nan"), float("inf"), float("-inf"), "nan", "inf", "-inf", "bad"):
-                for operation in ("goto", "scan"):
-                    with self.subTest(driver=type(device), value=value, operation=operation):
-                        previous_commands = self.resource.commands.copy()
-                        with self.assertRaises(ValueError):
-                            if operation == "goto":
-                                device.wavelength = value
-                            else:
-                                device.scan_to_wavelength(value)
-                        self.assertEqual(self.resource.commands, previous_commands)
-                        self.assertEqual(device.wavelength, original)
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf"), "nan", "inf", "-inf", "bad"])
+@pytest.mark.parametrize("operation", ["goto", "scan"])
+def test_nonfinite_wavelengths_and_scan_targets_send_no_commands(instrument, resource, value, operation):
+    original = instrument.wavelength
+    previous_commands = resource.commands.copy()
+    with pytest.raises(ValueError):
+        if operation == "goto":
+            instrument.wavelength = value
+        else:
+            instrument.scan_to_wavelength(value)
+    assert resource.commands == previous_commands
+    assert instrument.wavelength == original
 
-    def test_valid_values_retain_device_precision(self):
-        for device in self.devices:
-            for value, expected in (("0.06", 0.1), (123.46, 123.5)):
-                with self.subTest(driver=type(device), value=value):
-                    device.scan_speed = value
-                    self.assertEqual(device.scan_speed, expected)
-            device.wavelength = "532.26"
-            self.assertEqual(device.wavelength, 532.3)
-            device.scan_to_wavelength("0")
-            self.assertEqual(device.wavelength, 0.0)
 
-    def test_invalid_reported_scan_speed_stops_before_scan_or_timeout_change(self):
-        device = self.devices[0]
-        for speed in (0, -1, float("nan"), float("inf"), float("-inf")):
-            with self.subTest(speed=speed):
-                self.resource.scan_speed = speed
-                self.resource.commands.clear()
-                old_timeout = self.resource.timeout
-                with self.assertRaisesRegex(ValueError, "Reported scan speed"):
-                    device.scan_to_wavelength(500)
-                self.assertEqual(self.resource.commands, ["?NM", "?NM/MIN"])
-                self.assertEqual(self.resource.timeout, old_timeout)
-                self.assertEqual(self.resource.wavelength, 0.0)
+def test_valid_values_retain_device_precision(instrument):
+    for value, expected in (("0.06", 0.1), (123.46, 123.5)):
+        instrument.scan_speed = value
+        assert instrument.scan_speed == expected
+    instrument.wavelength = "532.26"
+    assert instrument.wavelength == 532.3
+    instrument.scan_to_wavelength("0")
+    assert instrument.wavelength == 0.0
+
+
+@pytest.mark.parametrize("speed", [0, -1, float("nan"), float("inf"), float("-inf")])
+def test_invalid_reported_scan_speed_stops_before_scan_or_timeout_change(connected_driver, resource, speed):
+    resource.scan_speed = speed
+    resource.commands.clear()
+    old_timeout = resource.timeout
+    with pytest.raises(ValueError, match="Reported scan speed"):
+        connected_driver.scan_to_wavelength(500)
+    assert resource.commands == ["?NM", "?NM/MIN"]
+    assert resource.timeout == old_timeout
+    assert resource.wavelength == 0.0

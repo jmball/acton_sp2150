@@ -1,286 +1,237 @@
-"""Validate the opt-in hardware harness itself, using only fake resources."""
+"""Exercise native pytest hardware collection and teardown using fake VISA only."""
 
-from contextlib import redirect_stderr
-import io
-import unittest
-from unittest.mock import Mock, patch
+import json
+from pathlib import Path
 
-from tests import hardware
+import pytest
+
+
+HARDWARE_ARGS = [
+    "--run-hardware", "--resource-name", "ASRL2::INSTR", "--visa-backend=@py",
+    "--wavelength", "500", "--scan-wavelength", "501", "--grating", "2",
+    "--turret", "1", "--filter-position", "3",
+]
+
+
+@pytest.fixture
+def hardware_project(pytester, monkeypatch):
+    # Protect configuration/collection too, before the inner autouse fixture runs.
+    from unittest.mock import Mock
+    monkeypatch.setattr("pyvisa.ResourceManager", Mock(side_effect=AssertionError("Unexpected early hardware access")))
+    source = Path(__file__).with_name("test_hardware.py").read_text()
+    pytester.makepyfile(test_hardware=source)
+    pytester.makeconftest('''
+import json
+from pathlib import Path
+from unittest.mock import Mock
+import pytest
+import pyvisa
 from tests.fakes import FakeSerial, make_manager
+import tests.hardware as hardware
+pytest_plugins = ["tests.hardware"]
+clock = None
 
+@pytest.fixture(autouse=True)
+def fake_backend(monkeypatch):
+    global clock
+    settings_path = Path("settings.json")
+    settings = json.loads(settings_path.read_text()) if settings_path.exists() else {}
+    if "clock" in settings:
+        if clock is None:
+            clock = iter(settings["clock"])
+        monkeypatch.setattr(hardware, "perf_counter", lambda: next(clock))
 
-class HardwareRunnerTests(unittest.TestCase):
-    def setUp(self):
-        self.arguments = [
-            "--resource-name", "ASRL2::INSTR", "--visa-backend", "@py",
-            "--wavelength", "500", "--scan-wavelength", "501",
-            "--grating", "2", "--turret", "1", "--filter-position", "3",
-        ]
-        self.resources = []
-        self.managers = []
-
-    def manager_factory(self, backend):
-        self.assertEqual(backend, "@py")
+    def factory(backend):
+        assert backend == "@py"
+        Path("opened").touch()
         resource = FakeSerial()
+        resource.fail_command = settings.get("fail_command")
         manager = make_manager(resource)
-        self.resources.append(resource)
-        self.managers.append(manager)
-        return manager
-
-    def assert_restored_and_closed(self):
-        for resource in self.resources:
-            self.assertEqual(resource.wavelength, 0.0)
-            self.assertEqual(resource.scan_speed, 1000.0)
-            self.assertEqual(resource.grating, 1)
-            self.assertEqual(resource.turret, 1)
-            self.assertEqual(resource.filter, 1)
-            self.assertEqual(resource.close_count, 1)
-        for manager in self.managers:
-            manager.close.assert_called_once()
-
-    def test_full_hardware_suite_exercises_every_command_and_restores_state(self):
-        output = io.StringIO()
-        result = hardware.main(self.arguments, manager_factory=self.manager_factory, stream=output)
-        self.assertEqual(result, 0, output.getvalue())
-        commands = {command for resource in self.resources for command in resource.commands}
-        self.assertTrue({
-            "NO-ECHO", "?NM/MIN", "?NM", "?GRATING", "?TURRET", "?FILTER",
-            "?GRATINGS", "?TURRETS", "600.0 NM/MIN", "500.0 GOTO", "501.0 NM",
-            "2 GRATING", "1 TURRET", "3 FILTER", "FHOME",
-        }.issubset(commands), commands)
-        self.assert_restored_and_closed()
-
-    def test_restoration_and_disconnect_run_after_a_command_failure(self):
-        def factory(backend):
-            manager = self.manager_factory(backend)
-            self.resources[-1].fail_command = "501.0 NM"
-            return manager
-
-        output = io.StringIO()
-        result = hardware.main(
-            self.arguments + ["--test", "test_scanned_wavelength"],
-            manager_factory=factory, stream=output,
-        )
-        self.assertEqual(result, 1)
-        self.assertIn("query failed", output.getvalue())
-        self.assert_restored_and_closed()
-
-    def test_turret_info_failure_is_reported_as_an_error_not_skipped(self):
-        def factory(backend):
-            manager = self.manager_factory(backend)
-            self.resources[-1].fail_command = "?TURRETS"
-            return manager
-
-        output = io.StringIO()
-        result = hardware.main(
-            self.arguments + ["--test", "test_turret_information"],
-            manager_factory=factory, stream=output,
-        )
-        self.assertEqual(result, 1)
-        self.assertIn("ERROR", output.getvalue())
-        self.assert_restored_and_closed()
-
-    def test_cleanup_attempts_remaining_settings_when_one_restore_fails(self):
-        output = io.StringIO()
-        with patch("tests.hardware.HardwareTests.test_direct_wavelength", create=True) as command:
-            def fail_restoration():
-                self.resources[-1].fail_command = "1 TURRET"
-
-            command.side_effect = fail_restoration
-            result = hardware.main(
-                self.arguments + ["--test", "test_direct_wavelength"],
-                manager_factory=self.manager_factory, stream=output,
-            )
-        self.assertEqual(result, 1)
-        self.assertIn("Could not restore", output.getvalue())
-        self.assertIn("0.0 GOTO", self.resources[0].commands)
-        self.assertEqual(self.resources[0].close_count, 1)
-        self.managers[0].close.assert_called_once()
-
-    def test_initial_connection_failure_still_closes_manager(self):
-        def factory(backend):
-            manager = self.manager_factory(backend)
+        if settings.get("open_failure"):
             manager.open_resource.side_effect = OSError("unreachable")
-            return manager
-
-        output = io.StringIO()
-        result = hardware.main(
-            self.arguments + ["--test", "test_direct_wavelength"],
-            manager_factory=factory, stream=output,
-        )
-        self.assertEqual(result, 1)
-        self.assertIn("unreachable", output.getvalue())
-        self.managers[0].close.assert_called_once()
-
-    def test_connection_options_are_passed_to_driver(self):
-        output = io.StringIO()
-        result = hardware.main(
-            self.arguments + ["--timeout", "45000", "--resource-option", "query_delay=0.05",
-                              "--resource-option", "open_timeout=2000", "--test", "test_filter"],
-            manager_factory=self.manager_factory, stream=output,
-        )
-        self.assertEqual(result, 0, output.getvalue())
-        self.assertEqual(self.resources[0].timeout, 45000)
-        self.assertEqual(self.resources[0].query_delay, 0.05)
-        self.managers[0].open_resource.assert_called_once_with(
-            "ASRL2::INSTR", open_timeout=2000, timeout=45000, query_delay=0.05
-        )
-
-    def test_invalid_cli_options_never_create_a_manager(self):
-        for extra in (
-            ["--resource-option", "timeout=1000"],
-            ["--resource-option", "query_delay=broken"],
-            ["--resource-option", "query_delay=0.1", "--resource-option", "query_delay=0.2"],
-            ["--scan-speed", "0"], ["--scan-speed", "nan"],
-            ["--scan-wavelength", "500"], ["--timeout", "-1"],
-            ["--home-repetitions", "0"], ["--filter-home-timeout-ms", "0"],
-        ):
-            with self.subTest(extra=extra), redirect_stderr(io.StringIO()):
-                factory = Mock()
-                with self.assertRaises(SystemExit) as error:
-                    hardware.main(self.arguments + extra, manager_factory=factory)
-                self.assertEqual(error.exception.code, 2)
-                factory.assert_not_called()
-
-    def test_fixed_cli_options_warn_and_use_device_configuration(self):
-        output = io.StringIO()
-        with self.assertWarnsRegex(UserWarning, "baud_rate.*encoding"):
-            result = hardware.main(
-                self.arguments + ["--resource-option", "baud_rate=115200",
-                                  "--resource-option", 'encoding="UTF-8"',
-                                  "--test", "test_filter"],
-                manager_factory=self.manager_factory, stream=output,
-            )
-        self.assertEqual(result, 0, output.getvalue())
-        self.managers[0].open_resource.assert_called_once_with("ASRL2::INSTR", timeout=30000)
-        self.assertEqual(self.resources[0].baud_rate, 9600)
-        self.assertEqual(self.resources[0].encoding, "ASCII")
-        self.assert_restored_and_closed()
-
-    def test_hardware_targets_are_required_before_any_connection(self):
-        with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
-            hardware.main(["--resource-name", "ASRL2::INSTR"], manager_factory=Mock())
-
-    def test_homing_timing_covers_every_position_and_reports_worst_case(self):
-        output = io.StringIO()
-        durations = (1, 4, 8, 17.25, 10, 5)
-        clock = [value for start, duration in zip(range(0, 120, 20), durations)
-                 for value in (start, start + duration)]
-        observed_timeouts = []
-
-        def factory(backend):
-            manager = self.manager_factory(backend)
-            resource = self.resources[-1]
-            original_query = resource.query
-
-            def query(command):
-                if command == "FHOME":
-                    observed_timeouts.append(resource.timeout)
-                return original_query(command)
-
-            resource.query = query
-            return manager
-
-        with patch("tests.hardware.perf_counter", side_effect=clock):
-            result = hardware.main(
-                self.arguments + ["--test", "test_home_filter_timing"],
-                manager_factory=factory, stream=output,
-            )
-        self.assertEqual(result, 0, output.getvalue())
-        self.assertEqual(observed_timeouts, [20000] * 6)
-        for position in range(1, 7):
-            self.assertIn(f"Homing from filter {position}, repeat 1:", output.getvalue())
-        self.assertIn("headroom +2.750 s (+13.8%)", output.getvalue())
-        self.assertIn("Slowest homing: filter 4, repeat 1, 17.250 s", output.getvalue())
-        self.assertEqual(self.resources[0].timeout, 30000)
-        self.assert_restored_and_closed()
-
-    def test_homing_timing_supports_repeats_and_custom_allowance(self):
-        output = io.StringIO()
-        observed_timeouts = []
-
-        def factory(backend):
-            manager = self.manager_factory(backend)
-            resource = self.resources[-1]
-            original_query = resource.query
-
-            def query(command):
-                if command == "FHOME":
-                    observed_timeouts.append(resource.timeout)
-                return original_query(command)
-
-            resource.query = query
-            return manager
-
-        clock = [value for start in range(0, 24, 2) for value in (start, start + 1)]
-        with patch("tests.hardware.perf_counter", side_effect=clock):
-            result = hardware.main(
-                self.arguments + ["--test", "test_home_filter_timing", "--home-repetitions", "2",
-                                  "--filter-home-timeout-ms", "45000"],
-                manager_factory=factory, stream=output,
-            )
-        self.assertEqual(result, 0, output.getvalue())
-        self.assertEqual(observed_timeouts, [45000] * 12)
-        self.assertIn("Homing from filter 6, repeat 2", output.getvalue())
-        self.assertEqual(self.resources[0].timeout, 30000)
-        self.assert_restored_and_closed()
-
-    def test_homing_timing_fails_when_estimate_is_exceeded(self):
-        output = io.StringIO()
-        clock = [value for start in range(0, 180, 30) for value in (start, start + 21)]
-        with patch("tests.hardware.perf_counter", side_effect=clock):
-            result = hardware.main(
-                self.arguments + ["--test", "test_home_filter_timing"],
-                manager_factory=self.manager_factory, stream=output,
-            )
-        self.assertEqual(result, 1)
-        self.assertIn("Homing exceeded its timeout allowance", output.getvalue())
-        self.assertIn("headroom -1.000 s", output.getvalue())
-        self.assertEqual(self.resources[0].timeout, 30000)
-        self.assert_restored_and_closed()
-
-    def test_homing_timeout_is_reported_with_timing_and_cleanup(self):
-        output = io.StringIO()
-
-        def factory(backend):
-            manager = self.manager_factory(backend)
-            self.resources[-1].fail_command = "FHOME"
-            return manager
-
-        clock = [value for start in range(0, 120, 20) for value in (start, start + 20)]
-        with patch("tests.hardware.perf_counter", side_effect=clock):
-            result = hardware.main(
-                self.arguments + ["--test", "test_home_filter_timing"],
-                manager_factory=factory, stream=output,
-            )
-        self.assertEqual(result, 1)
-        self.assertIn("query failed", output.getvalue())
-        self.assertIn("Homing from filter 6, repeat 1: 20.000 s", output.getvalue())
-        self.assertEqual(self.resources[0].timeout, 30000)
-        self.assert_restored_and_closed()
-
-    def test_homing_timing_checks_final_position(self):
-        output = io.StringIO()
-
-        def factory(backend):
-            manager = self.manager_factory(backend)
-            resource = self.resources[-1]
-            original_query = resource.query
-
-            def query(command):
-                result = original_query(command)
-                if command == "FHOME":
+        original_query = resource.query
+        def query(command):
+            if command == settings.get("fail_restoration"):
+                raise OSError("restoration failed")
+            result = original_query(command)
+            if command == "FHOME":
+                if settings.get("wrong_home"):
                     resource.filter = 2
-                return result
+                with Path("home_timeouts.jsonl").open("a") as out:
+                    out.write(json.dumps(resource.timeout) + "\\n")
+            return result
+        resource.query = query
+        def close():
+            record = dict(wavelength=resource.wavelength, scan_speed=resource.scan_speed,
+                          grating=resource.grating, turret=resource.turret, filter=resource.filter,
+                          timeout=resource.timeout, close_count=resource.close_count,
+                          commands=resource.commands, open_options=manager.open_resource.call_args.kwargs)
+            with Path("closed.jsonl").open("a") as out:
+                out.write(json.dumps(record) + "\\n")
+        manager.close.side_effect = close
+        return manager
+    monkeypatch.setattr(pyvisa, "ResourceManager", factory)
+''')
+    return pytester
 
-            resource.query = query
-            return manager
 
-        result = hardware.main(
-            self.arguments + ["--test", "test_home_filter_timing"],
-            manager_factory=factory, stream=output,
-        )
-        self.assertEqual(result, 1)
-        self.assertIn("2 != 1", output.getvalue())
-        self.assertEqual(self.resources[0].timeout, 30000)
-        self.assert_restored_and_closed()
+def records(project, name="closed.jsonl"):
+    path = project.path / name
+    return [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
+
+
+def assert_restored(project):
+    entries = records(project)
+    assert entries
+    for record in entries:
+        assert (record["wavelength"], record["scan_speed"], record["grating"], record["turret"], record["filter"]) == (0, 1000, 1, 1, 1)
+        assert record["close_count"] == 1
+
+
+def configure(project, **settings):
+    (project.path / "settings.json").write_text(json.dumps(settings))
+
+
+def test_default_collection_never_opens_hardware(hardware_project):
+    result = hardware_project.runpytest("-q")
+    result.assert_outcomes(skipped=15)
+    assert not (hardware_project.path / "opened").exists()
+
+
+def test_collect_only_never_opens_hardware(hardware_project):
+    result = hardware_project.runpytest("--collect-only", "-q", *HARDWARE_ARGS)
+    assert result.ret == 0
+    assert not (hardware_project.path / "opened").exists()
+
+
+def test_mark_selection_still_requires_explicit_hardware_flag(hardware_project):
+    result = hardware_project.runpytest("-q", "-m", "hardware")
+    result.assert_outcomes(skipped=15)
+    assert not (hardware_project.path / "opened").exists()
+
+
+def test_parallel_hardware_execution_is_rejected(hardware_project):
+    conftest = hardware_project.path / "conftest.py"
+    with conftest.open("a") as output:
+        output.write('\ndef pytest_addoption(parser):\n    parser.addoption("--numprocesses", type=int, default=0)\n')
+    result = hardware_project.runpytest("-q", *HARDWARE_ARGS, "--numprocesses", "2")
+    assert result.ret == pytest.ExitCode.USAGE_ERROR
+    assert "Hardware tests must run sequentially" in result.stderr.str()
+    assert not (hardware_project.path / "opened").exists()
+
+
+def test_full_hardware_suite_exercises_commands_and_restores(hardware_project):
+    result = hardware_project.runpytest("-q", *HARDWARE_ARGS)
+    result.assert_outcomes(passed=15)
+    commands = {command for entry in records(hardware_project) for command in entry["commands"]}
+    assert {"NO-ECHO", "?NM/MIN", "?NM", "?GRATING", "?TURRET", "?FILTER",
+            "?GRATINGS", "?TURRETS", "600.0 NM/MIN", "500.0 GOTO", "501.0 NM",
+            "2 GRATING", "1 TURRET", "3 FILTER", "FHOME"} <= commands
+    assert_restored(hardware_project)
+
+
+@pytest.mark.parametrize("name,command", [("test_scanned_wavelength", "501.0 NM"),
+                                         ("test_turret_information", "?TURRETS")])
+def test_command_failure_is_reported_and_restored(hardware_project, name, command):
+    configure(hardware_project, fail_command=command)
+    result = hardware_project.runpytest("-q", *HARDWARE_ARGS, "-k", name)
+    result.assert_outcomes(failed=1, deselected=14)
+    assert "query failed" in result.stdout.str()
+    assert_restored(hardware_project)
+
+
+def test_restoration_attempts_remaining_settings(hardware_project):
+    configure(hardware_project, fail_restoration="1 TURRET")
+    result = hardware_project.runpytest("-q", *HARDWARE_ARGS, "-k", "test_direct_wavelength")
+    result.assert_outcomes(passed=1, errors=1, deselected=14)
+    assert "Could not restore" in result.stdout.str()
+    entry = records(hardware_project)[0]
+    assert "0.0 GOTO" in entry["commands"]
+    assert entry["close_count"] == 1
+
+
+def test_initial_connection_failure_closes_manager(hardware_project):
+    configure(hardware_project, open_failure=True)
+    result = hardware_project.runpytest("-q", *HARDWARE_ARGS, "-k", "test_direct_wavelength")
+    result.assert_outcomes(errors=1, deselected=14)
+    assert "unreachable" in result.stdout.str()
+    assert len(records(hardware_project)) == 1
+
+
+def test_connection_options_are_forwarded(hardware_project):
+    result = hardware_project.runpytest("-q", *HARDWARE_ARGS, "-k", "test_filter",
+                                      "--timeout", "45000", "--resource-option", "query_delay=0.05",
+                                      "--resource-option", "open_timeout=2000")
+    result.assert_outcomes(passed=1, deselected=14)
+    assert records(hardware_project)[0]["open_options"] == dict(timeout=45000, query_delay=0.05, open_timeout=2000)
+    assert_restored(hardware_project)
+
+
+@pytest.mark.parametrize("extra", [
+    ["--resource-option", "timeout=1000"], ["--resource-option", "query_delay=broken"],
+    ["--resource-option", "query_delay=0.1", "--resource-option", "query_delay=0.2"],
+    ["--scan-speed", "0"], ["--scan-speed", "nan"], ["--scan-wavelength", "500"],
+    ["--timeout", "-1"], ["--home-repetitions", "0"], ["--filter-home-timeout-ms", "0"],
+])
+def test_invalid_options_never_open_hardware(hardware_project, extra):
+    result = hardware_project.runpytest("-q", *HARDWARE_ARGS, *extra)
+    assert result.ret == pytest.ExitCode.USAGE_ERROR
+    assert not (hardware_project.path / "opened").exists()
+
+
+def test_targets_are_required_before_connection(hardware_project):
+    result = hardware_project.runpytest("-q", "--run-hardware", "--resource-name", "ASRL2::INSTR")
+    assert result.ret == pytest.ExitCode.USAGE_ERROR
+    assert not (hardware_project.path / "opened").exists()
+
+
+def test_fixed_resource_options_warn_and_are_ignored(hardware_project):
+    with pytest.warns(UserWarning, match="Ignoring driver-managed resource options: baud_rate, encoding"):
+        result = hardware_project.runpytest("-q", *HARDWARE_ARGS, "-k", "test_filter",
+                                          "--resource-option", "baud_rate=115200",
+                                          "--resource-option", 'encoding="UTF-8"')
+    result.assert_outcomes(passed=1, deselected=14)
+    assert records(hardware_project)[0]["open_options"] == dict(timeout=30000)
+
+
+def test_homing_reports_every_position_and_worst_case(hardware_project):
+    durations = [1, 4, 8, 17.25, 10, 5]
+    clock = [value for start, duration in zip(range(0, 120, 20), durations) for value in (start, start + duration)]
+    configure(hardware_project, clock=clock)
+    result = hardware_project.runpytest("-q", *HARDWARE_ARGS, "-k", "test_home_filter_timing")
+    result.assert_outcomes(passed=6, deselected=9)
+    for position in range(1, 7):
+        assert f"Homing from filter {position}, repeat 1:" in result.stdout.str()
+    assert "headroom +2.750 s (+13.8%)" in result.stdout.str()
+    assert "Slowest homing: filter 4, repeat 1, 17.250 s" in result.stdout.str()
+    assert records(hardware_project, "home_timeouts.jsonl") == [20000] * 6
+    assert all(entry["timeout"] == 30000 for entry in records(hardware_project))
+    assert_restored(hardware_project)
+
+
+def test_homing_supports_repeats_and_custom_allowance(hardware_project):
+    clock = [value for start in range(0, 24, 2) for value in (start, start + 1)]
+    configure(hardware_project, clock=clock)
+    result = hardware_project.runpytest("-q", *HARDWARE_ARGS, "-k", "test_home_filter_timing",
+                                      "--home-repetitions", "2", "--filter-home-timeout-ms", "45000")
+    result.assert_outcomes(passed=12, deselected=9)
+    assert "Homing from filter 6, repeat 2" in result.stdout.str()
+    assert records(hardware_project, "home_timeouts.jsonl") == [45000] * 12
+    assert all(entry["timeout"] == 30000 for entry in records(hardware_project))
+    assert_restored(hardware_project)
+
+
+@pytest.mark.parametrize("failure", ["exceeded", "timeout", "wrong_position"])
+def test_homing_failures_report_measurements_and_cleanup(hardware_project, failure):
+    durations = 21 if failure == "exceeded" else 20
+    clock = [value for start in range(0, 180, 30) for value in (start, start + durations)]
+    configure(hardware_project, clock=clock, fail_command="FHOME" if failure == "timeout" else None,
+              wrong_home=failure == "wrong_position")
+    result = hardware_project.runpytest("-q", *HARDWARE_ARGS, "-k", "test_home_filter_timing")
+    result.assert_outcomes(failed=6, deselected=9)
+    message = {"exceeded": "Homing exceeded its timeout allowance", "timeout": "query failed",
+               "wrong_position": "2 == 1"}[failure]
+    assert message in result.stdout.str()
+    assert "Homing from filter 6, repeat 1:" in result.stdout.str()
+    assert all(entry["timeout"] == 30000 for entry in records(hardware_project))
+    assert_restored(hardware_project)

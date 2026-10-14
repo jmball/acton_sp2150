@@ -18,7 +18,7 @@ and FA-2448 filter wheel.
   The distribution name is `acton_sp2150`; import names are
   `sp2150` and `virtual_sp2150`.
 - `uv.lock`: committed dependency resolution for reproducible development.
-- `MANIFEST.in`: includes the tests and examples in source archives. Installation
+- `MANIFEST.in`: includes tests, examples, and uv.lock in source archives. Installation
   metadata and build configuration remain in `pyproject.toml`.
 - `LICENSE`: MIT license; keep package metadata consistent with this file.
 
@@ -39,16 +39,20 @@ dependency changes, and `uv lock` after editing dependency declarations by hand.
 Commit `uv.lock` updates alongside the corresponding `pyproject.toml` changes.
 Use setuptools as the build backend; do not introduce Hatchling.
 
-Tests use standard-library unittest:
+Tests use native pytest functions, fixtures, and parametrisation. Pytest is a
+locked development dependency. Keep test configuration in pyproject.toml:
 
 - `tests/test_virtual.py`: simulator state, lifecycle, and simulated experiments.
 - `tests/contract.py` and `tests/test_contract.py`: shared command behavior for the
   simulator and fake-backed driver, plus public signature/property parity.
 - `tests/test_commands.py` and `tests/test_connection.py`: exact VISA commands,
   parsing, configuration, ownership, timeouts, and failure cleanup.
-- `tests/hardware.py`: explicitly invoked integration runner against real hardware.
-  It is outside the discovery pattern and must never connect during default tests.
-- `tests/test_hardware_runner.py`: tests the integration runner using fake resources.
+- `tests/conftest.py`: shared fixtures and pytest plugin registration.
+- `tests/hardware.py`: pytest hardware options, guarded fixtures, restoration, and
+  timing reports. `tests/test_hardware.py` contains the hardware tests, marked
+  `hardware` and skipped unless --run-hardware is explicitly passed.
+- `tests/test_hardware_runner.py`: isolated pytest sessions using fake resources
+  to verify collection gating, option validation, failures, cleanup, and timing.
 - `tests/test_cli.py`: example argument validation, dispatch, and cleanup with
   the simulator and fake hardware resources.
 - `tests/test_numeric_validation.py`: finite numeric inputs, positive rounded
@@ -59,7 +63,7 @@ Tests use standard-library unittest:
 Run the default suite without hardware:
 
 ```sh
-uv run python -m unittest discover -s tests -t . -v
+uv run pytest -v
 ```
 
 There is no CI configuration or configured formatter or linter. Choose
@@ -77,16 +81,21 @@ properties and methods in a single simulator instance, or use a fake VISA
 resource/resource manager to check the hardware driver's commands, parsing,
 timeouts, and cleanup. Simulator checks alone do not validate the wire protocol.
 For packaging checks, run `uv build`; build outputs are ignored by Git.
-The real-hardware suite is invoked with `uv run python -m tests.hardware` and
+The real-hardware suite is invoked with
+`uv run pytest tests/test_hardware.py --run-hardware` and
 explicit resource, wavelength, grating, turret, and filter arguments (see README).
 It exercises all public commands and attempts state restoration after each test.
-Use `--test test_turret_information` to isolate the reinstated `?TURRETS` command.
+Use `-k test_turret_information` to isolate the reinstated `?TURRETS` command.
 Do not skip its failures merely because that command previously had firmware issues.
-Use `--test test_home_filter_timing` to measure homing from all six filter
+Use `-k test_home_filter_timing` to measure homing from all six filter
 positions, including home. `--home-repetitions` repeats the sweep and
 `--filter-home-timeout-ms` overrides the tested homing allowance. This test uses
 the exact allowance during FHOME so a longer general timeout cannot mask an
 invalid estimate; it reports durations, headroom, and the slowest observation.
+Homing positions and repeats have individual parametrised node IDs. Use
+--visa-backend=@py (equals sign); pytest treats standalone @py as an argument
+file. Hardware tests must run sequentially; parallel worker execution is rejected.
+Neither default runs nor --collect-only may contact hardware.
 
 ## Change conventions
 
