@@ -3,9 +3,9 @@
 import pytest
 
 from sp2150 import sp2150
-from virtual_sp2150 import sp2150 as virtual_sp2150
-from tests.fakes import FakeSerial, make_manager
 from tests.contract import ContractTargets
+from tests.fakes import FakeSerial, make_manager
+from virtual_sp2150 import sp2150 as virtual_sp2150
 
 pytest_plugins = ["tests.hardware_plugin", "pytester"]
 

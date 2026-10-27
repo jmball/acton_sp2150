@@ -3,8 +3,8 @@
 from unittest.mock import patch
 
 import pytest
-
 from examples import cli
+
 from tests.fakes import FakeSerial, make_manager
 
 

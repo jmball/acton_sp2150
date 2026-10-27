@@ -1,8 +1,9 @@
 """Stateful VISA doubles that never open a backend or contact equipment."""
 
+from unittest.mock import Mock
+
 from pyvisa import constants
 from pyvisa.resources import MessageBasedResource, SerialInstrument
-from unittest.mock import Mock
 
 
 def make_manager(resource):
@@ -50,16 +51,17 @@ class FakeResourceMixin:
         self.turret_info = "1: gratings 1, 2\r\n2: turret info"
         self._pending = b""
 
-    def set_visa_attribute(self, name, value):
+    def set_visa_attribute(self, name, state):
         if name == self.fail_attribute:
             raise ValueError("attribute rejected")
-        self.values[name] = value
+        self.values[name] = state
         return constants.StatusCode.success
 
     def get_visa_attribute(self, name):
         return self.values[name]
 
-    def query(self, command):
+    def query(self, message: str, delay: float | None = None) -> str:
+        command = message
         self.commands.append(command)
         if command == self.fail_command:
             raise TimeoutError("query failed")
@@ -91,7 +93,10 @@ class FakeResourceMixin:
         setattr(self, name, convert(value))
         return ""
 
-    def write(self, command):
+    def write(
+        self, message: str, termination: str | None = None, encoding: str | None = None
+    ) -> int:
+        command = message
         self.commands.append(command)
         if command == self.fail_command:
             raise TimeoutError("query failed")
@@ -99,7 +104,13 @@ class FakeResourceMixin:
         self._pending = f" {info} ok\r\n".encode("ASCII")
         return len(command)
 
-    def read_bytes(self, count):
+    def read_bytes(
+        self,
+        count: int,
+        chunk_size: int | None = None,
+        break_on_termchar: bool = False,
+        monitoring_interface=None,
+    ) -> bytes:
         if len(self._pending) < count:
             raise TimeoutError("incomplete response")
         response, self._pending = self._pending[:count], self._pending[count:]

@@ -37,6 +37,14 @@ Run the tests without hardware:
 uv run pytest
 ```
 
+Check types, lint, and formatting:
+
+```sh
+uv run ty check
+uv run ruff check .
+uv run ruff format --check .
+```
+
 Run hardware tests against a connected instrument:
 
 ```sh

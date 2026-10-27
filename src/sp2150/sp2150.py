@@ -2,18 +2,17 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
-from contextlib import contextmanager
 import logging
 import math
 import warnings
+from collections.abc import Generator
+from contextlib import contextmanager
 from types import TracebackType
 from typing import Any, Final
 
 import pyvisa
 from pyvisa import constants
 from pyvisa.resources import MessageBasedResource, SerialInstrument
-
 
 _LOGGER = logging.getLogger(__name__)
 Number = float | str
@@ -25,11 +24,21 @@ READ_TERMINATION: Final[str] = " ok\r\n"
 _NOT_CONNECTED: Final[str] = "Instrument is not connected"
 
 # Protocol and serial framing belong to the device, not to callers.
-_FIXED_OPTIONS = frozenset({
-    "read_termination", "write_termination", "encoding", "baud_rate",
-    "data_bits", "parity", "stop_bits", "flow_control", "end_input", "end_output",
-    "resource_pyclass",
-})
+_FIXED_OPTIONS = frozenset(
+    {
+        "read_termination",
+        "write_termination",
+        "encoding",
+        "baud_rate",
+        "data_bits",
+        "parity",
+        "stop_bits",
+        "flow_control",
+        "end_input",
+        "end_output",
+        "resource_pyclass",
+    }
+)
 
 
 def _to_finite_float(value: Number) -> float:
@@ -137,7 +146,9 @@ class sp2150:
         except Exception:
             if exc_type is None:
                 raise
-            _LOGGER.warning("Failed to disconnect during exception cleanup", exc_info=True)
+            _LOGGER.warning(
+                "Failed to disconnect during exception cleanup", exc_info=True
+            )
 
     def connect(
         self,
@@ -196,7 +207,9 @@ class sp2150:
             try:
                 instr.close()
             except Exception:
-                _LOGGER.warning("Failed to close the instrument after an error", exc_info=True)
+                _LOGGER.warning(
+                    "Failed to close the instrument after an error", exc_info=True
+                )
             raise
         self._instr = instr
 
@@ -258,7 +271,7 @@ class sp2150:
         return self._instr.read_bytes(count)
 
     @contextmanager
-    def _extended_timeout(self, minimum_ms: float) -> Iterator[None]:
+    def _extended_timeout(self, minimum_ms: float) -> Generator[None, None, None]:
         """Temporarily extend the VISA timeout for an operation.
 
         Preserve a longer or infinite caller timeout. Restore the previous
@@ -292,7 +305,10 @@ class sp2150:
             try:
                 instr.timeout = old_timeout
             except Exception:
-                _LOGGER.warning("Failed to restore the instrument timeout after an error", exc_info=True)
+                _LOGGER.warning(
+                    "Failed to restore the instrument timeout after an error",
+                    exc_info=True,
+                )
             raise
         else:
             instr.timeout = old_timeout
@@ -362,7 +378,9 @@ class sp2150:
         """
         speed = round(_to_finite_float(speed), 1)
         if speed <= 0:
-            raise ValueError("Scan speed must be positive after rounding to one decimal place")
+            raise ValueError(
+                "Scan speed must be positive after rounding to one decimal place"
+            )
         self._query(f"{speed:.1f} NM/MIN")
 
     def scan_to_wavelength(self, wavelength: Number) -> None:

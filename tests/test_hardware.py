@@ -48,15 +48,16 @@ Parameters
 
 import pytest
 
-from tests.contract import (
-    test_scan_speed,
+# These imports expose the shared tests for pytest collection.
+from tests.contract import (  # noqa: F401
     test_direct_wavelength,
-    test_scanned_wavelength,
-    test_grating,
-    test_turret,
     test_filter,
-    test_home_filter,
+    test_grating,
     test_grating_information,
+    test_home_filter,
+    test_scan_speed,
+    test_scanned_wavelength,
+    test_turret,
     test_turret_information,
 )
 from tests.hardware_plugin import measure_homing

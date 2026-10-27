@@ -65,8 +65,21 @@ Run the default suite without hardware:
 uv run pytest -v
 ```
 
-There is no CI configuration or configured formatter or linter. Choose
-validation appropriate to the change. Basic checks that do not contact hardware are:
+Always use ty for type checking and Ruff for linting and formatting. Both are
+locked development dependencies configured in pyproject.toml; do not introduce
+alternative type checkers, linters, or formatters. Both tools infer the minimum
+Python version from project.requires-python. Before completing Python changes, run:
+
+```sh
+uv run ty check
+uv run ruff check .
+uv run ruff format --check .
+```
+
+Use `uv run ruff check --fix .` for automatic lint fixes and `uv run ruff format .`
+to format code. Check source, examples, and tests; keep suppressions narrow and
+explain any intentional exceptions. There is no CI configuration. Other basic
+checks that do not contact hardware are:
 
 ```sh
 uv run python -m compileall -q src

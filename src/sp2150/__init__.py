@@ -6,4 +6,5 @@ try:
 except PackageNotFoundError:
     __version__ = "0.0.0"
 
-from .sp2150 import *
+# Preserve the package's existing public exports.
+from .sp2150 import *  # noqa: F403

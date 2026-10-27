@@ -6,8 +6,13 @@ from types import TracebackType
 from typing import Any
 
 import pyvisa
+
 from sp2150.sp2150 import (
-    Integer, Number, _NOT_CONNECTED, _discard_fixed_options, _to_finite_float,
+    _NOT_CONNECTED,
+    Integer,
+    Number,
+    _discard_fixed_options,
+    _to_finite_float,
 )
 
 
@@ -143,7 +148,9 @@ class sp2150:
         """
         speed = round(_to_finite_float(speed), 1)
         if speed <= 0:
-            raise ValueError("Scan speed must be positive after rounding to one decimal place")
+            raise ValueError(
+                "Scan speed must be positive after rounding to one decimal place"
+            )
         self._check_connection()
         self._scan_speed = speed
 

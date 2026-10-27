@@ -5,7 +5,6 @@ from pathlib import Path
 
 import pytest
 
-
 HARDWARE_ARGS = [
     "--resource-name",
     "ASRL2::INSTR",
